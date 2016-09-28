@@ -1,0 +1,23 @@
+<launch>
+	<arg name="calibrate" default="false"/>
+
+	<!-- Run Camera -->
+	<node name="camera" ns="my_stereo" pkg="uvc_camera" type="uvc_stereo_node" args="_left/device:=/dev/video1 _right/device:=/dev/video2" />
+
+	<!-- Run Calibrations -->
+	<group if="$(arg calibrate)" ns="my_stereo">
+		<node name="calibration" pkg="camera_calibration" type="cameracalibrator.py" args="--size=8x6 --square=0.024 right:=/my_stereo/right/image_raw left:=/my_stereo/left/image_raw right_camera:=/my_stereo/right left_camera:=/my_stereo/left"/>
+	</group>
+
+	<!-- Stereo Image-Processing -->
+	<group unless="$(arg calibrate)">
+		<group ns="my_stereo">
+			<node name="image_proc" pkg="stereo_image_proc" type="stereo_image_proc"/>
+		</group>
+		<!-- had to separate the viewing node namespaces -->
+		<node name="image_view" pkg="image_view" type="stereo_view" args="stereo:=/my_stereo image:=image_rect _approximate_sync:=True _queue_size:=10"/>
+		<node name="rviz" pkg="rviz" type="rviz" args="-d stereo.rviz"/>
+		<node name="configure" pkg="rqt_reconfigure" type="rqt_reconfigure"/>
+	</group>
+
+</launch>
