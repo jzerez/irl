@@ -6,7 +6,7 @@
 
 	<!-- Run Calibrations -->
 	<group if="$(arg calibrate)" ns="my_stereo">
-		<node name="calibration" pkg="camera_calibration" type="cameracalibrator.py" args="--size=8x6 --square=0.024 right:=/my_stereo/right/image_raw left:=/my_stereo/left/image_raw right_camera:=/my_stereo/right left_camera:=/my_stereo/left"/>
+		<node name="calibration" pkg="camera_calibration" type="cameracalibrator.py" args="--size=7x5 --square=0.028 right:=/my_stereo/right/image_raw left:=/my_stereo/left/image_raw right_camera:=/my_stereo/right left_camera:=/my_stereo/left" output="screen"/>
 	</group>
 
 	<!-- Stereo Image-Processing -->
