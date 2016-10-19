@@ -7,24 +7,28 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, Image
 from stereo_msgs.msg import DisparityImage
 
 br = CvBridge()
 
+def circleArea(r):
+    return r*r*3.14159265358979
+
 def identify_blobs(image,processed,size):
+    #identified = np.zeros(image.shape, dtype=image.dtype)
     identified = image.copy()
 
     #BLOB DETECTION ...
     params = cv2.SimpleBlobDetector_Params()
     params.minDistBetweenBlobs = 0
 
-    params.filterByColor = True 
-    params.blobColor = 255
+    params.filterByColor = False
+    #params.blobColor = 255
 
     params.filterByArea = True 
-    params.minArea = circleArea(size) * 0.3 
-    params.maxArea = circleArea(size) * 2.0
+    params.minArea = 400.
+    params.maxArea = 999999999.
 
     params.filterByCircularity = False
 
@@ -33,11 +37,11 @@ def identify_blobs(image,processed,size):
 
     params.filterByInertia = False
 
-    detector = cv2.SimpleBlobDetector_create(params)
+    detector = cv2.SimpleBlobDetector(params)
 
     labels = detector.detect(processed)
 
-    cv2.drawKeypoints(identified,labels,identified,color=(255,0,0),flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    identified = cv2.drawKeypoints(processed,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
     return len(labels), identified
 
@@ -49,17 +53,34 @@ def handleCloud(cloud):
 def handleDisparity(msg):
     global br
     im = br.imgmsg_to_cv2(msg.image)
-    cv2.normalize(im,im,1.,0.,cv2.NORM_MINMAX)
-    n, identified = identify_blobs(im,im,20.)
+    cv2.normalize(im,im,255.,0.,cv2.NORM_MINMAX)
+    im = im.astype(np.uint8)
+
+    k_dilate = np.asarray([
+        [.07,.12,.07],
+        [.12,.24,.12],
+        [.07,.12,.07]
+        ],np.float32)
+
+    proc = cv2.dilate(im, k_dilate, iterations = 5)
+
+    #proc = cv2.GaussianBlur(proc,(13,13),0) 
+
+    n, identified = identify_blobs(im,proc,1.)
+
+    print n # print number of blobs
+
     cv2.imshow('image', im)
     cv2.imshow('identified', identified)
-    cv2.waitKey(3)
+
+    cv2.waitKey(100)
     #print "MIN : {}, MAX : {}".format(disparity.min_disparity, disparity.max_disparity)
 
 def main():
     #dtype, n_channels = br.encoding_to_cvtype2('8UC3')
     rospy.Subscriber("my_stereo/points2", PointCloud2, handleCloud)
     rospy.Subscriber("my_stereo/disparity", DisparityImage, handleDisparity)
+    #rospy.Subscriber("my_stereo/left/image_rect", Image, handleDisparity)
 
     win = cv2.namedWindow('image')
 
