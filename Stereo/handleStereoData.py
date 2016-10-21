@@ -12,6 +12,7 @@ from stereo_msgs.msg import DisparityImage
 
 br = CvBridge()
 fgbg = cv2.BackgroundSubtractorMOG2()
+prvs = None
 
 def circleArea(r):
     return r*r*3.14159265358979
@@ -53,6 +54,8 @@ def handleCloud(cloud):
 
 def handleImage(msg):
     global br
+    global prvs
+
     im = br.imgmsg_to_cv2(msg)
     cv2.imshow('image', im)
 
@@ -64,28 +67,23 @@ def handleImage(msg):
     cv2.imshow('mask', mask)
 
 #New code
-    if(prvs):
-        ret, frame1 = cap.read()
-        prvs = cv2.cvtColor(frame1,cv2.COLOR_BGR2GRAY)
-        hsv = np.zeros_like(frame1)
+    if(prvs != None):
+        prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+        hsv = np.zeros_like(im)
         hsv[...,1] = 255
 
-        while(1):
-            ret, frame2 = cap.read()     
-            next = cv2.cvtColor(frame2,cv2.COLOR_BGR2GRAY)
+        next = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
 
-            flow = cv2.calcOpticalFlowFarneback(prvs,next, 0.5, 3, 15, 3, 5, 1.2, 0)
+        flow = cv2.calcOpticalFlowFarneback(prvs,next, 0.5, 3, 15, 3, 5, 1.2, 0)
 
-            mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-            hsv[...,0] = ang*180/np.pi/2
-            hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
-            bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
-
-            cv2.imshow('frame2',bgr)
-            k = cv2.waitKey(30) & 0xff
-
-            prvs = next
-
+        mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
+        hsv[...,0] = ang*180/np.pi/2
+        hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+        bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
+        cv2.imshow('optical flow',bgr)
+        prvs = next
+    else:
+        prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
 
 
 def handleDisparity(msg):
