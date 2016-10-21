@@ -68,7 +68,7 @@ def handleImage(msg):
 
 #New code
     if(prvs != None):
-        prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+        #prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
         hsv = np.zeros_like(im)
         hsv[...,1] = 255
 
@@ -80,7 +80,7 @@ def handleImage(msg):
         hsv[...,0] = ang*180/np.pi/2
         hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
         bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
-        cv2.imshow('optical flow',bgr)
+        cv2.imshow('optflow',bgr)
         prvs = next
     else:
         prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
@@ -107,9 +107,10 @@ def handleDisparity(msg):
     print n # print number of blobs
 
     cv2.imshow('disp', im)
-    cv2.imshow('identified', identified)
 
-    cv2.waitKey(1000)
+    cv2.imshow('disp-blobs', identified)
+
+    cv2.waitKey(1)
     #print "MIN : {}, MAX : {}".format(disparity.min_disparity, disparity.max_disparity)
 
 def main():
@@ -120,7 +121,8 @@ def main():
 
     win1 = cv2.namedWindow('disp')
     win2 = cv2.namedWindow('image')
-    win3 = cv2.namedWindow('identified')
+    win3 = cv2.namedWindow('disp-blobs')
+    win4 = cv2.namedWindow('optflow')
 
     rospy.init_node("cloudHandler", anonymous=True)
 
