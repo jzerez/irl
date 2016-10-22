@@ -10,51 +10,24 @@ import numpy as np
 from sensor_msgs.msg import PointCloud2, Image
 from stereo_msgs.msg import DisparityImage
 
+from blob_detection import *
+from background_subtraction import *
+from optical_flow import *
+
 br = CvBridge()
-fgbg = cv2.BackgroundSubtractorMOG2()
-prvs = None
 
-def circleArea(r):
-    return r*r*3.14159265358979
-
-def identify_blobs(image,processed,size):
-    #identified = np.zeros(image.shape, dtype=image.dtype)
-    identified = image.copy()
-
-    #BLOB DETECTION ...
-    params = cv2.SimpleBlobDetector_Params()
-    params.minDistBetweenBlobs = 0
-
-    params.filterByColor = False
-    #params.blobColor = 255
-
-    params.filterByArea = True 
-    params.minArea = 400.
-    params.maxArea = 999999999.
-
-    params.filterByCircularity = False
-
-    params.filterByConvexity = True 
-    params.minConvexity = 0.5
-
-    params.filterByInertia = False
-
-    detector = cv2.SimpleBlobDetector(params)
-
-    labels = detector.detect(processed)
-
-    identified = cv2.drawKeypoints(processed,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-
-    return len(labels), identified
-
+opt = None
+detector = BlobDetector()
+bksub = BackgroundSubtractor()
 
 def handleCloud(cloud):
+    # Handle Point Cloud
     #print "Height : {}, Width : {}".format(cloud.height, cloud.width)
     pass
 
 def handleImage(msg):
     global br
-    global prvs
+    global opt
 
     im = br.imgmsg_to_cv2(msg)
     cv2.imshow('image', im)
@@ -63,46 +36,23 @@ def handleImage(msg):
     im = cv2.GaussianBlur(im,(3,3),0) 
     #im = cv2.pyrMeanShiftFiltering(im,3,3)
 
-    mask = fgbg.apply(im, 0.5)
+    mask = bksub.apply(im) 
     cv2.imshow('mask', mask)
 
-#New code
-    if(prvs != None):
-        #prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
-        hsv = np.zeros_like(im)
-        hsv[...,1] = 255
-
-        next = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
-
-        flow = cv2.calcOpticalFlowFarneback(prvs,next, 0.5, 3, 15, 3, 5, 1.2, 0)
-
-        mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
-        hsv[...,0] = ang*180/np.pi/2
-        hsv[...,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
-        bgr = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
-        cv2.imshow('optflow',bgr)
-        prvs = next
+    if(opt != None):
+        opt_frame = opt.apply(im)
+        cv2.imshow('opt_flow',opt_frame)
     else:
-        prvs = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
-
+        opt = OpticalFlow(im)
 
 def handleDisparity(msg):
     global br
     im = br.imgmsg_to_cv2(msg.image)
     cv2.normalize(im,im,255.,0.,cv2.NORM_MINMAX)
     im = im.astype(np.uint8)
-
-    k_dilate = np.asarray([
-        [.07,.12,.07],
-        [.12,.24,.12],
-        [.07,.12,.07]
-        ],np.float32)
-
-    proc = cv2.dilate(im, k_dilate, iterations = 5) # fill the holes
-
     #proc = cv2.GaussianBlur(proc,(13,13),0) 
 
-    n, identified = identify_blobs(im,proc,1.)
+    n, identified = detector.apply(im)
 
     print n # print number of blobs
 
@@ -119,10 +69,11 @@ def main():
     rospy.Subscriber("my_stereo/disparity", DisparityImage, handleDisparity)
     rospy.Subscriber("my_stereo/left/image_rect_color", Image, handleImage)
 
+    # Instantiate all the windows
     win1 = cv2.namedWindow('disp')
     win2 = cv2.namedWindow('image')
     win3 = cv2.namedWindow('disp-blobs')
-    win4 = cv2.namedWindow('optflow')
+    win4 = cv2.namedWindow('opt_flow')
 
     rospy.init_node("cloudHandler", anonymous=True)
 
