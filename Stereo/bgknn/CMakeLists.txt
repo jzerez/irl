@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(opencv_bgknn)
 
+link_directories("numpy-opencv-converter/build")
+
 find_package(Boost REQUIRED COMPONENTS
 	python
 )
@@ -13,6 +15,7 @@ include_directories(
 	${Boost_INCLUDE_DIRS}
 	${PYTHON_INCLUDE_DIRS}
 	${OpenCV_INCLUDE_DIRS}
+	"./numpy-opencv-converter"
 	)
 
 add_library(opencv_bgknn SHARED bgfg_KNN.cpp)
@@ -21,4 +24,5 @@ target_link_libraries(opencv_bgknn
 	${Boost_LIBRARIES}
 	${PYTHON_LIBRARIES}
 	${OpenCV_LIBRARIES}
+	np_opencv_converter
 )

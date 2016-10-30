@@ -1,4 +1,6 @@
 #include "bgfg_KNN.h"
+#include "np_opencv_converter.hpp"
+
 #include <iostream>
 
 #include <boost/python.hpp>
@@ -509,7 +511,11 @@ http://www.zoranz.net/Publications/zivkovicPRL2006.pdf
 			}
 		}
 
-
+	Mat BackgroundSubtractorKNN::_apply(const Mat& image, double learningRate){
+		Mat res(image.size(), CV_8U);
+		apply(image, res, learningRate);
+		return res;
+	}
 
 	void BackgroundSubtractorKNN::apply(InputArray _image, OutputArray _fgmask, double learningRate)
 	{
@@ -608,7 +614,13 @@ http://www.zoranz.net/Publications/zivkovicPRL2006.pdf
 	}
 
 	BOOST_PYTHON_MODULE(libopencv_bgknn){
-		def("", createBackgroundSubtractorKNN);
+~
+	  fs::python::init_and_export_converters();
+
+		class_<cv::BackgroundSubtractorKNN>("BackgroundSubtractorKNN")
+			.def(init<int,double,bool>())
+			.def("apply", &cv::BackgroundSubtractorKNN::_apply)
+			;
 	}
 
 }

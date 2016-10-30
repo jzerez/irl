@@ -1,0 +1,3 @@
+[submodule "Stereo/bgknn/numpy-opencv-converter"]
+	path = Stereo/bgknn/numpy-opencv-converter
+	url = git@github.com:yycho0108/numpy-opencv-converter

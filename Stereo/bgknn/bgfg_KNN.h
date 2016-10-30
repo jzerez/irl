@@ -56,7 +56,9 @@ namespace cv{
 			/** @brief Returns the number of last frames that affect the background model
 			*/
 
+			Mat _apply(const Mat& image, double learningRate=-1);
 			void apply(InputArray image, OutputArray fgmask, double learningRate=-1);
+
 			virtual void getBackgroundImage(OutputArray backgroundImage) const;
 			virtual void initialize(Size _frameSize, int _frameType);
 			virtual void read(const FileNode& fs);
