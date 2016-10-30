@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 #### Object Tracking Code ####
 # Lydia Zuehsow, Olin College of Engineering Oct 2016
 # This code takes in a single video input and tracks significant objects, identifying them with a green circle. 

@@ -1,5 +1,4 @@
-
-# Created by https://www.gitignore.io/api/vim,git,sublimetext,c++,python,ros
+# Created by https://www.gitignore.io/api/vim,git,sublimetext,c++,python,ros,cmake
 
 ### Vim ###
 # swap
@@ -221,4 +220,12 @@ qtcreator-*
 # Catkin custom files
 CATKIN_IGNORE
 
-bags/
+
+### CMake ###
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Makefile
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmakebags/
