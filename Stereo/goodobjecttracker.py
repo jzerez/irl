@@ -18,14 +18,27 @@ class Target(object):
 		ap.add_argument("-a", "--min-area", type=int, default=1500, help="minimum area size")
 		self.args = vars(ap.parse_args())
 
+		self.count = 0
+		# self.firstframes = []
+		self.firstframe = None
+		self.thresh = None
+
+		# self.yellowLower = (5, 110, 100)
+		self.yellowLower = (20, 100, 100)
+		# self.yellowUpper = (50, 255, 255)
+		self.yellowUpper = (30, 255, 255)
+		self.greenLower = (29,30,6)
+		self.greenUpper = (64,255,255)
+
+		self.Lower = [self.yellowLower,self.greenLower]
+		self.Upper =[self.yellowUpper,self.greenUpper]
+
+		self.objectlist = [[0,0]]
 
 if __name__=="__main__":
 
 	t = Target()
-	count = 0
-	firstframes = []
-	thresh = None
-	firstframe = None
+	counter = 0
 
 	while True:
 		(grabbed, frame) = t.camera.read()
@@ -41,12 +54,12 @@ if __name__=="__main__":
 			frame = gray
 			continue
 		else:
-			if count == 0:
-				firstframe = gray
-				count += 1
+			if t.count == 0:
+				t.firstframe = gray
+				t.count += 1
 
-			if thresh is not None:
-				(cnts, _) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+			if t.thresh is not None:
+				(cnts, _) = cv2.findContours(t.thresh.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 				# loop over the contours
 				for c in cnts:
 					# if the contour is too small, ignore it
@@ -55,31 +68,57 @@ if __name__=="__main__":
 				# 	# compute the bounding box for the contour, draw it on the frame,
 				# 	# and update the text
 					(center,radius) = cv2.minEnclosingCircle(c)
-					cv2.circle(frame, (int(center[0]), int(center[1])), 5, (0,255,0), -1)
-					cv2.circle(frame, (int(center[0]), int(center[1])), 100, (0,255,0), 5)
+					if radius >= 50:
+						if center[0] >= 375:
+							center = (374,center[1])
+
+						cv2.circle(frame, (int(center[0]), int(center[1])), 5, (0,255,0), -1)
+						cv2.circle(frame, (int(center[0]), int(center[1])), int(radius), (0,255,0), 5)
+						# print "center", center
+						color = frame[int(center[0]),int((center[1]))]
+						# print color
+
+						if ((color[0] <= t.yellowUpper[0]) and (color[0] >= t.yellowLower[0])):
+							print 'Found yellow object'
+							# print center
+							# print color
+							# for obj in t.objectlist:
+							# 	minrad = obj[0]
+							# 	maxrad = obj[1]
+							# 	if ((radius - 10) >= minrad) and ((radius + 10) <= maxrad):
+							# 		if counter <= 5:
+							# 			print 'Found object'
+							# 			counter += 1
+							# 	else:
+							# 		t.objectlist.append([radius - 10,radius + 10])
+							# 		if counter <= 5:
+							# 			print 'New object'
+							# 		# print "Object list:", t.objectlist
+
+						# objectupper[i] = color + []
 					# (x, y, w, h) = cv2.boundingRect(c)
 					# cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
 			cv2.imshow("Camera", frame)
 
-		if firstframe is not None:
-			frameDelta = cv2.absdiff(firstframe, gray)
-			thresh = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]
-			thresh = cv2.dilate(thresh, None, iterations=7)
+		if t.firstframe is not None:
+			frameDelta = cv2.absdiff(t.firstframe, gray)
+			t.thresh = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]
+			t.thresh = cv2.dilate(t.thresh, None, iterations=7)
 
-			(cnts, _) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+			(cnts, _) = cv2.findContours(t.thresh.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 
-			cv2.imshow("Static Frame", thresh)
+			cv2.imshow("Static Frame", t.thresh)
 
-		if np.average(thresh) > 200:
-			firstframe = gray
+		if np.average(t.thresh) > 200:
+			t.firstframe = gray
 
 		key = cv2.waitKey(1) & 0xFF
 		# if the `q` key is pressed, break from the lop
 		if key == ord("q"):
 			break
 		if key == ord("r"):
-			firstframe = gray
+			t.firstframe = gray
 
 	# compute the absolute difference between the current frame and
 	# # first frame
