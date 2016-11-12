@@ -72,13 +72,13 @@ def main():
     #dtype, n_channels = br.encoding_to_cvtype2('8UC3')
     rospy.Subscriber("my_stereo/points2", PointCloud2, handleCloud)
     rospy.Subscriber("my_stereo/disparity", DisparityImage, handleDisparity)
-    rospy.Subscriber("my_stereo/left/image_rect_color", Image, handleImage)
+    rospy.Subscriber("my_stereo/left/image_rect_color", Image, handleImage) # disparity image is based on left camera
 
     # Instantiate all the windows
-    #win1 = cv2.namedWindow('disp')
-    win2 = cv2.namedWindow('image')
-    win3 = cv2.namedWindow('disp-blobs')
-    win4 = cv2.namedWindow('opt_flow')
+    win1 = cv2.namedWindow('image')
+    win2 = cv2.namedWindow('disp-blobs') # based on disparity
+    win3 = cv2.namedWindow('opt_flow') # based on optical flow
+    win4 = cv2.namedWindow('bksub') # based on background subtraction
 
     rospy.init_node("cloudHandler", anonymous=True)
 
