@@ -14,7 +14,7 @@ class BlobDetector:
         params.blobColor = 255
 
         params.filterByArea = True 
-        params.minArea = 400.
+        params.minArea = 3000.
         params.maxArea = 999999999.
 
         params.filterByCircularity = False
@@ -28,7 +28,6 @@ class BlobDetector:
         self.detector = cv2.SimpleBlobDetector(params)
 
     def apply(self, img):
-        identified = img.copy()
         #identified = np.zeros(image.shape, dtype=image.dtype)
         k_dilate = np.asarray([
             [.07,.12,.07],
@@ -37,7 +36,28 @@ class BlobDetector:
             ],np.float32)
 
         proc = cv2.dilate(img, k_dilate, iterations = 5) # fill the holes
+
+        identified = proc.copy()
+
         labels = self.detector.detect(proc)
-        identified = cv2.drawKeypoints(proc,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
+        #if len(proc.shape) == 3 and proc.shape[2] == 3:
+        #    proc = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
+
+        ctrs, hrch = cv2.findContours(proc, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+        id_ctrs = []
+
+        for ctr in ctrs:
+            a = cv2.contourArea(ctr)
+            if 3000 < a and a < 1000000:
+                x,y,w,h = cv2.boundingRect(ctr)
+                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+                id_ctrs.append(ctr)
+
+        cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
+
+        identified = cv2.drawKeypoints(identified,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
         return len(labels), identified
+

@@ -37,11 +37,16 @@ def handleImage(msg):
     #im = cv2.pyrMeanShiftFiltering(im,3,3)
 
     mask = bksub.apply(im) 
-    cv2.imshow('mask', mask)
+    n, bksub_id = detector.apply(mask)
+    cv2.imshow('bksub', bksub_id)
 
     if(opt != None):
         opt_frame = opt.apply(im)
-        cv2.imshow('opt_flow',opt_frame)
+        opt_frame = cv2.cvtColor(opt_frame, cv2.COLOR_BGR2GRAY)
+        _, opt_frame = cv2.threshold(opt_frame, 0, 255, cv2.THRESH_OTSU)
+        #cv2.imshow('opt_flow',opt_frame)
+        n, opt_id = detector.apply(opt_frame)
+        cv2.imshow('opt_flow',opt_id)
     else:
         opt = OpticalFlow(im)
 
@@ -50,14 +55,14 @@ def handleDisparity(msg):
     im = br.imgmsg_to_cv2(msg.image)
     cv2.normalize(im,im,255.,0.,cv2.NORM_MINMAX)
     im = im.astype(np.uint8)
-    #proc = cv2.GaussianBlur(proc,(13,13),0) 
+    im = cv2.GaussianBlur(im,(13,13),0) 
+    _, im = cv2.threshold(im, 128, 255, cv2.THRESH_BINARY)
 
     n, identified = detector.apply(im)
 
     print n # print number of blobs
 
-    cv2.imshow('disp', im)
-
+    #cv2.imshow('disp', im)
     cv2.imshow('disp-blobs', identified)
 
     cv2.waitKey(1)
@@ -70,7 +75,7 @@ def main():
     rospy.Subscriber("my_stereo/left/image_rect_color", Image, handleImage)
 
     # Instantiate all the windows
-    win1 = cv2.namedWindow('disp')
+    #win1 = cv2.namedWindow('disp')
     win2 = cv2.namedWindow('image')
     win3 = cv2.namedWindow('disp-blobs')
     win4 = cv2.namedWindow('opt_flow')
