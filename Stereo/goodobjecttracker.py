@@ -123,33 +123,6 @@ if __name__=="__main__":
 									print 'List is now: ' , t.objectlist
 							counter +=1 
 
-								# for obj in range(1,len(t.objectlist)):
-								# 	print t.objectlist[obj]
-								# 	rad = t.objectlist[1]
-								# 	(minrad, maxrad) = rad
-								# 	if ((radius - 10) >= minrad) and ((radius +10) <= maxrad):
-								# 		print 'Found object:' , obj
-								# 	else:
-								# 		t.objectlist.append(radius)
-								# 		print 'Added object to list:', t.objectlist
-								# counter += 1
-							# for obj in t.objectlist:
-							# 	rad = obj[0]
-							
-							# 	if ((radius - 10) >= minrad) and ((radius + 10) <= maxrad):
-							# 		if counter <= 5:
-							# 			print 'Found object {}'.format(obj)
-							# 			counter += 1
-							# 	else:
-							# 		t.objectlist.append([radius - 10,radius + 10])
-							# 		if counter <= 5:
-							# 			print 'New object'
-							# 		print "Object list:", t.objectlist
-
-						# objectupper[i] = color + []
-					# (x, y, w, h) = cv2.boundingRect(c)
-					# cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
 			cv2.imshow("Camera", t.frame)
 
 		if t.firstframe is not None:
