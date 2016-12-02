@@ -74,6 +74,7 @@ def main():
             ],np.float32)
 
 
+    cnt = 0
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
@@ -88,6 +89,7 @@ def main():
         im_opt = handle_opt(im_l)
         im_bksub = handle_bksub(im_l)
 
+        # rudimentary, combine detection data
         im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
         im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
 
@@ -109,7 +111,12 @@ def main():
 
         if rect != None:
             x,y,w,h = rect
-            cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+            if w*h < 100000:
+                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+                cropped = im_l[y:y+h,x:x+w]
+                cv2.imshow("cropped", cropped)
+                cv2.imwrite("data_%d.png" % cnt, cropped)
+                cnt += 1
 
         cv2.imshow("identified", identified)
 
