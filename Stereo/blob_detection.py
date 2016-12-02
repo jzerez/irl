@@ -65,11 +65,12 @@ class BlobDetector:
             i = np.argmax(l)
             ctr = id_ctrs[i]
             x,y,w,h = cv2.boundingRect(ctr)
-            cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+            return x,y,w,h
+        return None
 
         #cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
 
-        identified = cv2.drawKeypoints(identified,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        #identified = cv2.drawKeypoints(identified,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-        return labels, identified
+        #return labels, identified
 

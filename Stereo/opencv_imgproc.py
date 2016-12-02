@@ -62,7 +62,7 @@ def main():
     cam_l = cv2.VideoCapture(1)
     cam_r = cv2.VideoCapture(2)
 
-    rect = Rectifier(
+    rectifier = Rectifier(
             param_l = os.path.join(pkg_root, 'Stereo/camera_info/left_camera.yaml'),
             param_r = os.path.join(pkg_root, 'Stereo/camera_info/right_camera.yaml')
             )
@@ -77,7 +77,7 @@ def main():
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
-        im_l, im_r = rect.apply(left, right)
+        im_l, im_r = rectifier.apply(left, right)
 
         im_disp = handle_disp(im_l, im_r)
 
@@ -103,7 +103,14 @@ def main():
         #cv2.imshow("im_opt", im_opt)
         #cv2.imshow("im_bksub", im_bksub)
         #cv2.imshow("im_comb", im_comb)
-        labels, identified = detector.apply(im_comb)
+        rect = detector.apply(im_comb)
+
+        identified = im_l.copy()
+
+        if rect != None:
+            x,y,w,h = rect
+            cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+
         cv2.imshow("identified", identified)
 
         cv2.waitKey(1)
