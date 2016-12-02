@@ -44,7 +44,6 @@ def handleImage(msg):
         opt_frame = opt.apply(im)
         opt_frame = cv2.cvtColor(opt_frame, cv2.COLOR_BGR2GRAY)
         _, opt_frame = cv2.threshold(opt_frame, 0, 255, cv2.THRESH_OTSU)
-        #cv2.imshow('opt_flow',opt_frame)
         n, opt_id = detector.apply(opt_frame)
         cv2.imshow('opt_flow',opt_id)
     else:

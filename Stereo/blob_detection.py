@@ -11,7 +11,6 @@ class BlobDetector:
         params.minDistBetweenBlobs = 0
 
         params.filterByColor = False 
-        params.blobColor = 255
 
         params.filterByArea = True 
         params.minArea = 3000.
@@ -24,7 +23,6 @@ class BlobDetector:
 
         params.filterByInertia = False
 
-        detector = cv2.SimpleBlobDetector(params)
         self.detector = cv2.SimpleBlobDetector(params)
 
     def apply(self, img):
@@ -41,8 +39,9 @@ class BlobDetector:
 
         labels = self.detector.detect(proc)
 
-        #if len(proc.shape) == 3 and proc.shape[2] == 3:
-        #    proc = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
+        if len(proc.shape) == 3 and proc.shape[2] == 3:
+            # BGR --> GRAY
+            proc = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
 
         ctrs, hrch = cv2.findContours(proc, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
@@ -59,5 +58,5 @@ class BlobDetector:
 
         identified = cv2.drawKeypoints(identified,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-        return len(labels), identified
+        return labels, identified
 
