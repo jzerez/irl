@@ -19,7 +19,7 @@ class BlobDetector:
         params.filterByCircularity = False
 
         params.filterByConvexity = True 
-        params.minConvexity = 0.5
+        params.minConvexity = 0.8
 
         params.filterByInertia = False
 
@@ -50,11 +50,24 @@ class BlobDetector:
         for ctr in ctrs:
             a = cv2.contourArea(ctr)
             if 3000 < a and a < 1000000:
-                x,y,w,h = cv2.boundingRect(ctr)
-                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
                 id_ctrs.append(ctr)
 
-        cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
+        # Fill in Contour with average value
+        l = []
+        for i in range(len(id_ctrs)):
+            cimg = np.zeros_like(proc)
+            cv2.drawContours(cimg, id_ctrs, i, color=255, thickness=-1)
+            pts = np.where(cimg == 255)
+            t = np.average(img[pts[0], pts[1]])
+            l.append(t)
+            
+        if len(l) > 0:
+            i = np.argmax(l)
+            ctr = id_ctrs[i]
+            x,y,w,h = cv2.boundingRect(ctr)
+            cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+
+        #cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
 
         identified = cv2.drawKeypoints(identified,labels,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
