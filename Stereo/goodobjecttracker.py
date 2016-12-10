@@ -10,6 +10,9 @@ import cv2
 import imutils
 import numpy as np
 import argparse
+from background_subtraction import BackgroundSubtractor
+
+bksub = BackgroundSubtractor()
 
 class Target(object):
 	def __init__(self):
@@ -17,6 +20,7 @@ class Target(object):
 		# construct the argument parser and parse the arguments
 		ap = argparse.ArgumentParser()
 		ap.add_argument("-v", "--video", help="path to the video file")
+		
 		ap.add_argument("-a", "--min-area", type=int, default=1500, help="minimum area size")
 		self.args = vars(ap.parse_args())
 
@@ -26,11 +30,15 @@ class Target(object):
 		self.thresh = None
 
 		self.yellowLower = (20, 100, 100)
-		# self.yellowUpper = (262, 274, 255)
 		self.yellowUpper = (30, 255, 255)
 
-		self.greenLower = (45,100,100)
-		self.greenUpper = (75,255,255)
+		self.redLower = (0, 100, 100)
+		self.redUpper = (30, 255, 255)
+		self.redLower1 = (160, 100, 100)
+		self.redUpper1 = (180, 255, 255)
+
+		self.greenLower = (0,100,100)
+		self.greenUpper = (80,255,255)
 
 		self.blueLower = (90,100,100)
 		self.blueUpper = (125,255,255)
@@ -38,7 +46,7 @@ class Target(object):
 		self.Lower = [self.yellowLower,self.greenLower]
 		self.Upper =[self.yellowUpper,self.greenUpper]
 
-		self.objectlist = [[0,(0,0),'Null']] # Radius, XY coordinates.
+		self.objectlist = []#[[0,(0,0),'Null']] # Radius, XY coordinates.
 
 class Find_Color(object):
 	def __init__(self, frame):
@@ -65,7 +73,7 @@ class Find_Color(object):
 				objnum += 1
 				
 			if temp == False:
-				t.objectlist.append([radius,(0,0),fc.objcolor])
+				t.objectlist.append([radius,(cX, cY),fc.objcolor])
 				print 'Added object to list:' , [radius,(int(center[0]), int(center[1])),str(fc.objcolor)]
 				print fc.objcolor
 				print 'List is now: ' , t.objectlist
@@ -103,43 +111,60 @@ if __name__=="__main__":
 			if t.thresh is not None:
 				(cnts, _) = cv2.findContours(cv2.GaussianBlur(t.thresh.copy(), (25,25), 0), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 				# loop over the contours
+
 				for c in cnts:
 					# if the contour is too small, ignore it
 					if cv2.contourArea(c) < t.args["min_area"]:
 						continue
-				# 	# compute the bounding box for the contour, draw it on the frame,
-				# 	# and update the text
-				# (x, y, w, h) = cv2.boundingRect(c)
-				# cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-					(center,radius) = cv2.minEnclosingCircle(c)
-					if radius >= 50:
-						# print "radius: " , radius
-						
-						cv2.circle(t.frame, (int(center[0]), int(center[1])), 5, (0,255,0), -1)
-						cv2.circle(t.frame, (int(center[0]), int(center[1])), int(radius), (0,255,0), 5)
-						# print "center", center
-						
-						cv2.imshow('blr', fc.blurred)
+					else:
+						(center,radius) = cv2.minEnclosingCircle(c)
+						if radius >= 50:
+							M = cv2.moments(c)
+							cX = int(M["m10"] / M["m00"])
+							cY = int(M["m01"] / M["m00"])
+							cv2.circle(t.frame, (cX, cY), 7, (255, 255, 255), -1)
+							cv2.circle(t.frame, (cX, cY), int(radius), (255,255,255), 5)
 
-						color = fc.blurred[int(center[1]),int((center[0]))]
-						# print color[0]
-						# print radius
+							# print "radius: " , radius
+							
+							# cv2.circle(t.frame, (int(center[0]), int(center[1])), 5, (0,255,0), -1)
+							# cv2.circle(t.frame, (int(center[0]), int(center[1])), int(radius), (0,255,0), 5)
+							# print "center", center
+							
+							cv2.imshow('blr', fc.blurred)
 
-						if ((color[0] <= t.yellowUpper[0]) and (color[0] >= t.yellowLower[0])):
-							# print 'Found yellow object'
-							# print center
-							# print color
-							fc.objcolor = "Yellow"
-							fc.findobject()
-							counter +=1 
-						if ((color[0] <= t.greenUpper[0]) and (color[0] >= t.greenLower[0])):
-							fc.objcolor = "Green"
-							fc.findobject()
-							counter +=1
-						if ((color[0] <= t.blueUpper[0]) and (color[0] >= t.blueLower[0])):
-							fc.objcolor = "Blue"
-							fc.findobject()
-							counter +=1 
+							# color = fc.blurred[int(center[1]),int((center[0]))]
+							# print cX, cY
+
+							if (cX >= 480):
+								cX = 479
+							elif (cX <= 0):
+								cX = 1
+
+
+							color = fc.blurred[(cX,cY)]
+							print color[0]
+							# print radius
+
+							# if ((color[0] <= t.yellowUpper[0]) and (color[0] >= t.yellowLower[0])):
+							# 	# print 'Found yellow object'
+							# 	# print center
+							# 	# print color
+							# 	fc.objcolor = "Yellow"
+							# 	fc.findobject()
+							# 	counter +=1 
+							if (((color[0] <= t.redUpper[0]) and (color[0] >= t.redLower[0])) or ((color[0] <= t.redUpper1[0]) and (color[0] >= t.redLower1[0]))):
+								fc.objcolor = "Red"
+								fc.findobject()
+								counter +=1 
+							if ((color[0] <= t.greenUpper[0]) and (color[0] >= t.greenLower[0])):
+								fc.objcolor = "Green"
+								fc.findobject()
+								counter +=1
+							if ((color[0] <= t.blueUpper[0]) and (color[0] >= t.blueLower[0])):
+								fc.objcolor = "Blue"
+								fc.findobject()
+								counter +=1 
 
 			cv2.imshow("Camera", t.frame)
 
@@ -149,6 +174,7 @@ if __name__=="__main__":
 			t.thresh = cv2.dilate(t.thresh, None, iterations=7)
 
 			(cnts, _) = cv2.findContours(t.thresh.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+                        #t.thresh = bksub.apply(gray)
 
 			cv2.imshow("Static Frame", t.thresh)
 
