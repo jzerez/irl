@@ -27,7 +27,6 @@ detector = BlobDetector()
 bksub = BackgroundSubtractor()
 sgbm = SGBM()
 
-
 def projectDisparityTo3d(x,y,Q,d):
     x,y,z = (Q[0,0]*x + Q[0,3], Q[1,1]*y + Q[1,3], Q[2,3])
     w = Q[3,2]*d + Q[3,3]
