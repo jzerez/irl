@@ -57,7 +57,7 @@ class SGBM(object):
     def __init__(self):
         # fixed parameters for current oCam setup
         # StereoSGBM([minDisparity, numDisparities, SADWindowSize[, P1[, P2[, disp12MaxDiff[, preFilterCap[, uniquenessRatio[, speckleWindowSize[, speckleRange[, fullDP]]]]]]]]]) -> <StereoSGBM object>
-        self.bm = cv2.StereoSGBM(0, 64, 13, 200, 400, 0, 30, 15, 100, 4, False)
+        self.bm = cv2.StereoSGBM(0, 64, 11, 200, 400, 0, 30, 15, 100, 4, False)
         #self.sgbm = cv2.StereoBM(cv2.STEREO_BM_BASIC_PRESET, 16, 5)
     def apply(self, im_l, im_r):
         #im_l =  cv2.cvtColor(im_l, cv2.COLOR_BGR2GRAY)

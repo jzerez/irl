@@ -9,256 +9,280 @@
 import cv2
 import imutils
 import numpy as np
-import argparse
 import rospy
-from geometry_msgs import Point
+from geometry_msgs.msg import Point
+from std_msgs.msg import String
 from background_subtraction import BackgroundSubtractor
 
-bksub = BackgroundSubtractor()
+from match import Matcher
+
+MIN_AREA = 10000
+MAX_DIST = 10
+k_dilate = cv2.getStructuringElement(cv2.MORPH_DILATE, (5,5),(2,2))
+
+def within(low,x,high):
+    return low < x and x < high
+
+def x2t(x, dim, fov):
+    theta = fov/2
+    # angle difference
+    a = float(x) / dim # assuming 640 is frame width
+    return np.arctan2(2*a*np.sin(theta)-np.sin(theta), np.cos(theta))
+
+def cnt_avg_col(cnt, img):
+    mask = np.zeros(img.shape[:-1], np.uint8)
+    cv2.drawContours(mask, [cnt],0,255,-1)
+    return cv2.mean(img, mask)
+
+def areacalc(contour, dist):
+    xdim, ydim = 640, 480
+    xFoV, yFoV = np.deg2rad(65), np.deg2rad(29.2)
+
+    x,y,w,h = cv2.boundingRect(contour)
+    print 'x : {}, y : {}, w : {}, h : {}'.format(x,y,w,h)
+
+    centerx = x+(0.5*w)
+    centery = y+(0.5*h)
+
+    xmint = x2t(x, xdim, xFoV)
+    xmaxt = x2t(x+w, xdim, xFoV)
+
+    ymint = x2t(y, ydim, yFoV)
+    ymaxt = x2t(y+h, ydim, yFoV)
+
+    xmin_width = np.tan(xmint) * dist
+    ymin_length = np.tan(ymint) * dist
+    xmax_width = np.tan(xmaxt) * dist
+    ymax_length = np.tan(ymaxt) * dist
+
+    xwidth = xmax_width - xmin_width
+    ylength = ymax_length - ymin_length
+
+    area = xwidth * ylength
+    return area
+
+def classify_size(area):
+    if (area <= .01): # m^2
+        return "small"
+    elif (area <= .05):
+        return "medium"
+    else:
+        return "large"
 
 class Target(object):
-	def __init__(self, passed_umod_frame, passed_dist, passed_bkg_mask):
-		self.input = "small blue object"
+    def __init__(self):
+        # construct the argument parser and parse the arguments
+        self.redLower = 0
+        self.redUpper = 22.5
 
-		self.frame = passed_umod_frame
-		(rows,cols,color) = dim.shape
-		self.dim = [rows,cols]
-		self.dist = passed_dist
+        self.redLower1 = 160
+        self.redUpper1 = 180
 
-		#Camera FoV info
-		self.xFoV = 32.5 #Degrees, the field of vision on the x axis
-		self.yFoV = 20.9 #Degrees
+        self.greenLower = 30
+        self.greenUpper = 80
 
-		# construct the argument parser and parse the arguments
-		ap = argparse.ArgumentParser()
-		
-		ap.add_argument("-a", "--min-area", type=int, default=1500, help="minimum area size")
-		self.args = vars(ap.parse_args())
+        self.blueLower = 70
+        self.blueUpper = 135
 
-		self.count = 0
-		self.bkg_mask = passed_bkg_mask
+        self.size = 'small'
+        self.color = 'blue'
 
-		self.redLower = (0, 100, 100)
-		self.redUpper = (30, 255, 255)
-		self.redLower1 = (160, 100, 100)
-		self.redUpper1 = (180, 255, 255)
+    def set(self, size, color):
+        self.size = size.lower()
+        self.color = color.lower()
 
-		self.greenLower = (0,100,100)
-		self.greenUpper = (80,255,255)
+    def compute_mask(self, img):
+        color = self.color.lower() 
+        if color == 'red':
+            mask0 = cv2.inRange(img, (self.redLower, 0,0), (self.redUpper,255,255))
+            mask1 = cv2.inRange(img, (self.redLower1, 0,0), (self.redUpper1,255,255))
+            return mask0 + mask1
+        elif color == 'blue':
+            return cv2.inRange(img, (self.blueLower, 0,0), (self.blueUpper,255,255))
+        elif color == 'green':
+            return cv2.inRange(img, (self.greenLower, 0,0), (self.greenUpper,255,255))
 
-		self.blueLower = (90,100,100)
-		self.blueUpper = (125,255,255)
+    def colorcompare(self, color):
+        color = color[0]
+        objcolor = None
+        if within(self.redLower,color,self.redUpper) or within(self.redLower1,color,self.redUpper1):
+            objcolor = "red"
+        elif within(self.greenLower,color,self.greenUpper):
+            objcolor = "green"
+        elif within(self.blueLower,color,self.blueUpper):
+            objcolor = "blue"
+        return (self.color == objcolor)
 
-		# self.Lower = [self.yellowLower,self.greenLower]
-		# self.Upper =[self.yellowUpper,self.greenUpper]
+    def sizecompare(self, size):
+        objsize = classify_size(size)
+        return (self.size == objsize)
 
-		self.objectlist = []#[[0,(0,0),'Null']] # Contour area, XY coordinates.
+    def filter(self, obj): # size, color
+        color_pass = self.colorcompare(obj.color)
+        size_pass = self.sizecompare(obj.size)
+        print 'col : {}, size : {}'.format(color_pass, size_pass)
 
+        return self.colorcompare(obj.color) and self.sizecompare(obj.size)
+                
 class Process_Info(object):
-	def __init__(self, passed_command):
-		cmdstr = passed_command
+    def __init__(self):
+        pass
 
-		colors = ['blue', 'red', 'green']
-		sizes = ['small', 'medium', 'large']
+    def process(self, cmd):
+        cmdstr = passed_command
 
-		cmdwrds = cmdstr.split()
-		self.findcommands(colors, sizes, cmdwrds)
+        colors = ['blue', 'red', 'green']
+        sizes = ['small', 'medium', 'large']
 
-	def findcommands(self, passed_colors, passed_sizes, passed_cmdwrds)
-		for word in cmdwrds:
-			for color in colors:
-				if word.lower() == color.lower():
-					self.color = color
-			for size in sizes:
-				if word.lower() == size.lower():
-					self.size = size
-		print "Looking for a %s %s thing!".format{self.size, self.color}
+        cmdwrds = cmdstr.split()
 
-	def newcommand(self, passed_command):
-		cmdstr = passed_command
+        self.objcolor = "Null"
+        self.objsize = "Null"
+        self.finalpubval = [] #[x,y,dist]
 
-		colors = ['blue', 'red', 'green']
-		sizes = ['small', 'medium', 'large']
+        return self.findcommands(colors, sizes, cmdwrds)
 
-		cmdwrds = cmdstr.split()
-
-		self.objcolor = "Null"
-		self.objsize = "Null"
-		self.finalpubval = [] #[x,y,dist]
-
-		self.findcommands(colors, sizes, cmdwrds)
-
+    def findcommands(self, passed_colors, passed_sizes, cmdwrds):
+        for word in cmdwrds:
+            for color in colors:
+                if word.lower() == color.lower():
+                    self.color = color
+            for size in sizes:
+                if word.lower() == size.lower():
+                    self.size = size
+        print "Looking for a %s %s thing!".format(self.size, self.color)
+        return self.size, self.color
 
 class Locate_Object(object):
-	def __init__(self, frame):
-		self.blurred = cv2.GaussianBlur(frame, (21, 21), 0)
-		self.objcolor = "Null"
-		self.objsize = "Null"
-		self.finalpubval = [] #[x,y,dist]
+	def __init__(self):
+            self.objcolor = "Null"
+            self.objsize = "Null"
+            self.finalpubval = [] #[x,y,dist]
+
+        def apply(self, hsv, mask, dist):
+            blurred = cv2.GaussianBlur(hsv, (21, 21), 0)
+            (cnts, _) = cv2.findContours(cv2.GaussianBlur(mask.copy(), (25,25), 0), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            objects = []
+            for c in cnts:
+                area = cv2.contourArea(c) # Fake Area
+                if area < MIN_AREA:
+                    continue
+
+                ## Find Center of Contour Moment
+                M = cv2.moments(c)
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+
+                d = dist[cY,cX][2] * 10.0 # ??
+                area = areacalc(c,d) # Real Area (corrected for physical dimensions)
+
+                ## Protect Limits
+                if (cX >= 640):
+                        cX = 640 
+                elif (cX <= 0):
+                        cX = 1
+
+                color = cv2.addWeighted(cnt_avg_col(c, blurred),0.5, blurred[(cY,cX)],0.5,0.0)
+                print color[0]
+
+                x,y,w,h = cv2.boundingRect(c)
+                objects.append(Object(blurred[y:y+h,x:x+w], color, (cX,cY), area)) # x-y ordering
+            return objects
 
 	def findobject(self):
-		temp = False
-		objnum = 0
+            temp = False
+            objnum = 0
 
-		for obj in t.objectlist:
-			objarea = obj[0]
+            for obj in t.objectlist:
+                    objarea = obj[0]
 
-			if ((area - 25.0) <= objarea) and ((area + 25.0) >= objarea):
-				print 'Found object:' , objnum
-				# print 'List is now: ' , t.objectlist
-				temp = True
+                    if ((area - 25.0) <= objarea) and ((area + 25.0) >= objarea):
+                            print 'Found object:' , objnum
+                            # print 'List is now: ' , t.objectlist
+                            temp = True
 
-			objnum += 1
-			
-		if temp == False:
-			t.objectlist.append([area,(cX, cY),lo.objcolor])
-			print 'Added object to list:' , [area,(int(center[0]), int(center[1])),str(lo.objcolor)]
-			print lo.objcolor
-			print 'List is now: ' , t.objectlist
+                    objnum += 1
+                    
+            if temp == False:
+                    t.objectlist.append([area,(cX, cY),lo.objcolor])
+                    print 'Added object to list:' , [area,(int(center[0]), int(center[1])),str(lo.objcolor)]
+                    print lo.objcolor
+                    print 'List is now: ' , t.objectlist
 
-	def areacalc(self, contour, passed_dist):
-		[xdim,ydim] = t.dim
-		dist = passed_dist
+class Object(object):
+    # data class to hold on to relevant parameters
+    def __init__(self, img, color, pos, size):
+        self.img = img
+        self.color = color
+        self.pos = pos
+        self.size = size # --> real area
 
-		x,y,w,h = cv2.boundingRect(contour)
-		centerx = x+(0.5*w)
-		centery = y+(0.5*h)
+class ObjectTracker(object):
+    def __init__(self):
+        self.objects = [] # list of objects it's discovered/tracked so far
+        self.current_objects = []
+        self.target = Target()
+        self.target.set("medium","blue") 
 
-		xmin_theta = x * (t.xFoV/xdim)
-		ymin_theta = y * (t.yFoV/ydim)
-		xmax_theta = (x+w) * (t.xFoV/xdim)
-		ymax_theta = (y+h) * (t.yFoV/ydim)
+        self.process_info = Process_Info()
+        self.locate_object = Locate_Object()
+        self.matcher = Matcher()
 
-		xmin_width = np.tan(xmin_theta) * dist
-		ymin_length = np.tan(ymin_theta) * dist
-		xmax_width = np.tan(xmax_theta) * dist
-		ymax_length = np.tan(ymax_theta) * dist
+        #rospy.init_node('coord_data', anonymous=True)
+        self.sub = rospy.Subscriber('cmd', String, self.cmd_cb) # Check that this works
+        self.pub = rospy.Publisher('obj_pos', Point, queue_size=10)
 
-		xwidth = xmax_length - xmin_length
-		ylength = ymax_length - ymin_length
+    def cmd_cb(self, cmd):
+        #ROS Passing in commands as strings
+        size, color = process_info.process(cmd)
+        self.set_target(size,color)
 
-		area = xwidth * ylength
-		coords = [x,y]
-		return [area,coords]
+    def set_target(self,size,color):
+        # target = filter to use for the object
+        # contains color-size bounds information
+        self.target.set(size,color) 
 
-	def colorcompare(self, color):
-		if (((color[0] <= t.redUpper[0]) and (color[0] >= t.redLower[0])) or ((color[0] <= t.redUpper1[0]) and (color[0] >= t.redLower1[0]))):
-			lo.objcolor = "Red"
-			lo.findobject()
-		if ((color[0] <= t.greenUpper[0]) and (color[0] >= t.greenLower[0])):
-			lo.objcolor = "Green"
-			lo.findobject()
-		if ((color[0] <= t.blueUpper[0]) and (color[0] >= t.blueLower[0])):
-			lo.objcolor = "Blue"
-			lo.findobject()
+    def apply(self, mask, img, dist):
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        color_mask = self.target.compute_mask(hsv)
+        mask = cv2.bitwise_and(color_mask, mask)
+        mask = cv2.dilate(mask, k_dilate, iterations=3)
+        cv2.imshow('mask', mask)
 
-	def passcoords(self, passed_color, passed_area, passed_coords, passed_dist):
-		objcolor = passed_color
-		area = passed_area
-		coords = passed_coords
-		dist = passed_dist
+        self.current_objects = self.locate_object.apply(hsv, mask, dist)
 
-		if ((lo.finalpubval == None)||((lo.finalpubval != None)&&(dist > lo.finalpubval[1]))): #If there is no final published value, publish one. If there is already a value present, determine which is closer.
-			if (area <= 9.0): #inches
-				lo.objsize = "Small"
-			else if ((area > 9.0) && (area <= 25.0)):
-				lo.objsize = "Medium"
-			else if (area > 25.0):
-				lo.objsize = "Large"
+        target_pos = (320,240)
+        target_size = 0
+        target_img = None
 
-			if (objcolor.lower() == pi.color.lower()): #If the object color matches the target color...
-				if (objsize.lower() == pi.size.lower()): #If the object size matches the target size...
-					lo.finalpubval = [coords,dist]
-		else:
-			pass
+        matched = False # prefer previously seen objects
+        for obj in self.current_objects:
+            match = False
+            for old_obj in self.objects:
+                match = matcher.match(old_obj.img, obj.img)
+                if not match:
+                    self.objects.append(obj)
+                else:
+                    pass
+                    #if self.target.filter(obj):
+                    #    matched = True
+                    #    target_pos = obj.pos
+                    #    target_img = obj.img
+                    #break
+            if True: #self.target.filter(obj): # passed filter
+                target_size = obj.size
+                target_pos = obj.pos
+                target_img = obj.img
 
+        self.publish(target_pos)
+        print target_size
+        return target_pos, target_img
 
-	def CoordPub():
-		[coords,dist] = lo.finalpubval
+    def publish(self, target_pos):
+        point = Point(target_pos[0], target_pos[1], 0)#x,y
+        self.pub.publish(point)
 
-	    pub = rospy.Publisher('obj_pos', Point, queue_size=10)
-	    rospy.init_node('coord_data', anonymous=True)
-	    rate = rospy.Rate(10) # 10hz
-	    while not rospy.is_shutdown():
-	        pub.publish(coords)
-	        rate.sleep()
-
-	# def objectpoint(self, theta, dist):
-	# 	area = areacalc(tracked_cnt,dist)
-	# 	[xmin_theta,xmax_theta,ymin_theta,ymax_theta] = theta
-	# 	pt_angle = (xmax_theta+xmintheta) / 2
-
-	# 	objspd = 1.0
-	# 	return [pt_angle, obj_spd]
-
-
-
-
-if __name__=="__main__":
-
-	command = "small blue object"
-
-	pi = Process_Info(command)
-	t = Target(umod_frame, dist, bkg_mask)
-
-	while True:
-		
-		hsv = cv2.cvtColor(t.frame, cv2.COLOR_BGR2HSV)
-		lo = Locate_Object(hsv)
-		
-		# if the first frame is None, initialize it
-		if t.bkg_mask is not None:
-			(cnts, _) = cv2.findContours(cv2.GaussianBlur(t.bkg_mask.copy(), (25,25), 0), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-			# loop over the contours
-
-			for c in cnts:
-				# if the contour is too small, ignore it
-				if cv2.contourArea(c) < t.args["min_area"]:
-					continue
-				else:
-					(center,radius) = cv2.minEnclosingCircle(c)
-					[area, coords] = lo.areacalc(t.frame,c,t.dist) #Find the area of the contour
-					# if radius >= 50:
-					if area >= 100:
-						M = cv2.moments(c)
-						cX = int(M["m10"] / M["m00"])
-						cY = int(M["m01"] / M["m00"])
-
-						cv2.circle(t.frame, (cX, cY), 7, (255, 255, 255), -1)
-						cv2.circle(t.frame, (cX, cY), int(radius), (255,255,255), 5)
-
-						# print "radius: " , radius
-						
-						# cv2.circle(t.frame, (int(center[0]), int(center[1])), 5, (0,255,0), -1)
-						# cv2.circle(t.frame, (int(center[0]), int(center[1])), int(radius), (0,255,0), 5)
-						# print "center", center
-						
-						cv2.imshow('blr', lo.blurred)
-
-						# color = lo.blurred[int(center[1]),int((center[0]))]
-
-						if (cX >= 480):
-							cX = 479
-						elif (cX <= 0):
-							cX = 1
-
-
-						color = lo.blurred[(cX,cY)]
-
-						lo.colorcompare(color) #Find the closest matching color in the HSV colorspace
-						lo.passcoords(lo.objcolor, area, coords, t.dist) #Check to see if object stats match object being tracked, then transmit obj. coords
-
-						# [pt_angle, obj_spd] = lo.objectpoint(thetalist,tracked_cnt,t.dist)
-
-				cv2.imshow("Camera", t.frame)
-
-		try:
-	        CoordPub()
-	    except rospy.ROSInterruptException:
-	        pass
-
-		key = cv2.waitKey(1) & 0xFF
-		# if the `q` key is pressed, break from the lop
-		if key == ord("q"):
-			print t.objectlist
-			break
+if __name__ == "__main__":
+    rospy.init_node('object_tracker')
+    object_tracker = ObjectTracker()
+    rospy.spin()

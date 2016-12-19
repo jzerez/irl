@@ -24,6 +24,6 @@ int cnt = 0;
 
 void loop() {
   nh.spinOnce();
-  yaw_servo.writeMicroseconds(1500 + (500 * dir));
+  yaw_servo.writeMicroseconds(1500 + (100 * dir));
   delay(10);
 }

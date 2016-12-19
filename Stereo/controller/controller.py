@@ -38,7 +38,7 @@ def get_pos(msg):
 def main():
     global x,y
     fov = np.deg2rad(65)
-    pid = PID(1.0,0.0,0.0)
+    pid = PID(1.0,0.05,0.01)
 
     rospy.init_node('demo')
     rate = rospy.Rate(100.0)
@@ -53,8 +53,8 @@ def main():
         dt = (now - then)
         then = now
 
-        val = pid.compute(err, dt) 
-        print err,val
+        val = -pid.compute(err, dt) 
+        print val
 
         pub.publish(val)
         rate.sleep()
