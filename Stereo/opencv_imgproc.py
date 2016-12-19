@@ -70,8 +70,8 @@ def demo():
             param_r = os.path.join(pkg_root, 'Stereo/camera_info/right_camera.yaml')
             )
 
-    cam_l = cv2.VideoCapture(1)
-    cam_r = cv2.VideoCapture(2)
+    cam_l = cv2.VideoCapture(2)
+    cam_r = cv2.VideoCapture(1)
 
     cnt = 0
     while True:
@@ -80,6 +80,9 @@ def demo():
         im_l, im_r = rectifier.apply(left, right)
 
         im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
+
+        print np.max(raw_disp)
+        print np.min(raw_disp)
 
         # Now Apply Blur ...
         blur = cv2.GaussianBlur(im_l,(3,3),0) 
@@ -91,10 +94,11 @@ def demo():
         im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
         im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
 
+        _, im_comb = cv2.threshold(im_comb, 30, 255, cv2.THRESH_BINARY)
         cv2.imshow("im_disp", im_disp)
         #cv2.imshow("im_opt", im_opt)
         #cv2.imshow("im_bksub", im_bksub)
-        #cv2.imshow("im_comb", im_comb)
+        cv2.imshow("im_comb", im_comb)
 
         #rect = detector.apply(im_comb)
 
@@ -102,7 +106,7 @@ def demo():
 
         dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
 
-        obj = lydia(im_l,dist,im_comb) # lydia's code here
+        #obj = lydia(im_l,dist,im_comb) # lydia's code here
 
         cv2.imshow("identified", identified)
 
@@ -117,8 +121,8 @@ def generate_dataset():
     rospack = rospkg.RosPack()
     pkg_root = rospack.get_path('edwin')
 
-    cam_l = cv2.VideoCapture(1)
-    cam_r = cv2.VideoCapture(2)
+    cam_l = cv2.VideoCapture(2)
+    cam_r = cv2.VideoCapture(1)
 
     rectifier = Rectifier(
             param_l = os.path.join(pkg_root, 'Stereo/camera_info/left_camera.yaml'),
