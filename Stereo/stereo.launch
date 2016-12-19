@@ -2,11 +2,11 @@
 	<arg name="calibrate" default="false"/>
 
 	<!-- Run Camera -->
-	<node name="camera" ns="my_stereo" pkg="uvc_camera" type="uvc_stereo_node" args="_left/device:=/dev/video1 _right/device:=/dev/video2" />
+	<node name="camera" ns="my_stereo" pkg="uvc_camera" type="uvc_stereo_node" args="_left/device:=/dev/video2 _right/device:=/dev/video1" />
 
 	<!-- Run Calibrations -->
 	<group if="$(arg calibrate)" ns="my_stereo">
-		<node name="calibration" pkg="camera_calibration" type="cameracalibrator.py" args="--size=7x5 --square=0.028 right:=/my_stereo/right/image_raw left:=/my_stereo/left/image_raw right_camera:=/my_stereo/right left_camera:=/my_stereo/left" output="screen"/>
+		<node name="calibration" pkg="camera_calibration" type="cameracalibrator.py" args="--size=7x5 --square=0.0284 right:=/my_stereo/right/image_raw left:=/my_stereo/left/image_raw right_camera:=/my_stereo/right left_camera:=/my_stereo/left" output="screen"/>
 	</group>
 
 	<!-- Stereo Image-Processing -->

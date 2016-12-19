@@ -24,12 +24,34 @@ class Rectifier(object):
     def __init__(self, param_l, param_r):
         m_l, d_l, r_l, p_l = get_matrices(param_l)
         m_r, d_r, r_r, p_r = get_matrices(param_r)
+
+        Q = np.zeros((4,4), dtype=np.float32)
+
+        fx = p_l[0,0]
+        cx = p_l[0,2]
+        cy = p_l[1,2]
+        fy = p_l[1,1]
+        #Tx = p_l[0,3]
+        Tx = p_r[0,3] / p_r[0,0]
+        rcx = p_l[0,2]
+
+        Q[0,0] = fy * Tx
+        Q[0,3] = -fy * cx * Tx
+        Q[1,1] = fx * Tx
+        Q[1,3] = -fx * cy * Tx
+        Q[2,3] = fx * fy * Tx
+        Q[3,2] = -fy
+        Q[3,3] = fy * (cx - rcx)
+
+        self.Q = Q
+
         self.c_l_m1, self.c_l_m2 = cv2.initUndistortRectifyMap(m_l,d_l,r_l,p_l, (640,480), cv2.CV_32FC1)
         self.c_r_m1, self.c_r_m2 = cv2.initUndistortRectifyMap(m_r,d_r,r_r,p_r, (640,480), cv2.CV_32FC1)
     def apply(self, left, right):
         im_l = cv2.remap(left, self.c_l_m1, self.c_l_m2, cv2.INTER_LINEAR)
         im_r = cv2.remap(right, self.c_r_m1, self.c_r_m2, cv2.INTER_LINEAR)
         return im_l, im_r
+
 
 class SGBM(object):
     def __init__(self):
@@ -38,7 +60,7 @@ class SGBM(object):
         self.sgbm = cv2.StereoSGBM(0, 128, 9, 4000, 4000, 0, 31, 4, 1000, 5, False)
     def apply(self, im_l, im_r):
         disp = self.sgbm.compute(im_l, im_r)
-        return cv2.normalize(disp,None,0,255,cv2.NORM_MINMAX).astype(np.uint8)
+        return disp
 
 if __name__ == "__main__":
     # Usage example

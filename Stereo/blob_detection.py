@@ -65,7 +65,8 @@ class BlobDetector:
             i = np.argmax(l)
             ctr = id_ctrs[i]
             x,y,w,h = cv2.boundingRect(ctr)
-            return x,y,w,h
+            m = cv2.moments(ctr)
+            return x,y,w,h,m
         return None
 
         #cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
