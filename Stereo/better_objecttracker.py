@@ -16,10 +16,17 @@ bksub = BackgroundSubtractor()
 
 class Target(object):
 	def __init__(self, umod_frame, dist, bkg_mask):
+		self.input = "small blue object"
+
 		self.frame = umod_frame
 		(rows,cols,color) = dim.shape
 		self.dim = [rows,cols]
 		self.dist = dist
+
+		#Camera FoV info
+		self.xFoV = 32.5 #Degrees, the field of vision on the x axis
+		self.yFoV = 20.9 #Degrees
+
 		# construct the argument parser and parse the arguments
 		ap = argparse.ArgumentParser()
 		
@@ -43,9 +50,27 @@ class Target(object):
 		# self.Lower = [self.yellowLower,self.greenLower]
 		# self.Upper =[self.yellowUpper,self.greenUpper]
 
-		self.objectlist = []#[[0,(0,0),'Null']] # Radius, XY coordinates.
+		self.objectlist = []#[[0,(0,0),'Null']] # Contour area, XY coordinates.
 
-class Find_Color(object):
+class Process_Info(object):
+	def __init__(self, command):
+		cmdstr = command
+
+		colors = ['blue', 'red', 'green']
+		sizes = ['small', 'medium', 'large']
+
+		cmdwrds = cmdstr.split()
+
+		for word in cmdwrds:
+			for color in colors:
+				if word.lower() == color.lower():
+					self.color = color
+			for size in sizes:
+				if word.lower() == size.lower():
+					self.size = size
+		print "Looking for a %s %s thing!".format{self.size, self.color}
+
+class Locate_Object(object):
 	def __init__(self, frame):
 		self.blurred = cv2.GaussianBlur(frame, (21, 21), 0)
 		self.objcolor = "Null"
@@ -65,21 +90,10 @@ class Find_Color(object):
 			objnum += 1
 			
 		if temp == False:
-			t.objectlist.append([area,(cX, cY),fc.objcolor])
-			print 'Added object to list:' , [area,(int(center[0]), int(center[1])),str(fc.objcolor)]
-			print fc.objcolor
+			t.objectlist.append([area,(cX, cY),lo.objcolor])
+			print 'Added object to list:' , [area,(int(center[0]), int(center[1])),str(lo.objcolor)]
+			print lo.objcolor
 			print 'List is now: ' , t.objectlist
-
-	def colorcompare(self, color):
-		if (((color[0] <= t.redUpper[0]) and (color[0] >= t.redLower[0])) or ((color[0] <= t.redUpper1[0]) and (color[0] >= t.redLower1[0]))):
-			fc.objcolor = "Red"
-			fc.findobject()
-		if ((color[0] <= t.greenUpper[0]) and (color[0] >= t.greenLower[0])):
-			fc.objcolor = "Green"
-			fc.findobject()
-		if ((color[0] <= t.blueUpper[0]) and (color[0] >= t.blueLower[0])):
-			fc.objcolor = "Blue"
-			fc.findobject()
 
 	def areacalc(self, contour, dist):
 		[xdim,ydim] = t.dim
@@ -88,10 +102,10 @@ class Find_Color(object):
 		centerx = x+(0.5*w)
 		centery = y+(0.5*h)
 
-		xmin_theta = x * (180.0/xdim)
-		ymin_theta = y * (180.0/ydim)
-		xmax_theta = (x+w) * (180.0/xdim)
-		ymax_theta = (y+h) * (180.0/ydim)
+		xmin_theta = x * (t.xFoV/xdim)
+		ymin_theta = y * (t.yFoV/ydim)
+		xmax_theta = (x+w) * (t.xFoV/xdim)
+		ymax_theta = (y+h) * (t.yFoV/ydim)
 
 		xmin_width = np.tan(xmin_theta) * dist
 		ymin_length = np.tan(ymin_theta) * dist
@@ -102,8 +116,26 @@ class Find_Color(object):
 		ylength = ymax_length - ymin_length
 
 		area = xwidth * ylength
-		return area
+		return [area,thetalist]
 
+	def colorcompare(self, color):
+		if (((color[0] <= t.redUpper[0]) and (color[0] >= t.redLower[0])) or ((color[0] <= t.redUpper1[0]) and (color[0] >= t.redLower1[0]))):
+			lo.objcolor = "Red"
+			lo.findobject()
+		if ((color[0] <= t.greenUpper[0]) and (color[0] >= t.greenLower[0])):
+			lo.objcolor = "Green"
+			lo.findobject()
+		if ((color[0] <= t.blueUpper[0]) and (color[0] >= t.blueLower[0])):
+			lo.objcolor = "Blue"
+			lo.findobject()
+
+	# def objectpoint(self, theta, dist):
+	# 	area = areacalc(tracked_cnt,dist)
+	# 	[xmin_theta,xmax_theta,ymin_theta,ymax_theta] = theta
+	# 	pt_angle = (xmax_theta+xmintheta) / 2
+
+	# 	objspd = 1.0
+	# 	return [pt_angle, obj_spd]
 
 if __name__=="__main__":
 
@@ -112,7 +144,7 @@ if __name__=="__main__":
 	while True:
 		
 		hsv = cv2.cvtColor(t.frame, cv2.COLOR_BGR2HSV)
-		fc = Find_Color(hsv)
+		lo = Locate_Object(hsv)
 		
 		# if the first frame is None, initialize it
 		if t.bkg_mask is not None:
@@ -125,7 +157,7 @@ if __name__=="__main__":
 					continue
 				else:
 					(center,radius) = cv2.minEnclosingCircle(c)
-					area = fc.areacalc(t.frame,c,t.dist) #Find the area of the contour
+					[area, thetalist] = lo.areacalc(t.frame,c,t.dist) #Find the area of the contour
 					# if radius >= 50:
 					if area >= 100:
 						M = cv2.moments(c)
@@ -141,9 +173,9 @@ if __name__=="__main__":
 						# cv2.circle(t.frame, (int(center[0]), int(center[1])), int(radius), (0,255,0), 5)
 						# print "center", center
 						
-						cv2.imshow('blr', fc.blurred)
+						cv2.imshow('blr', lo.blurred)
 
-						# color = fc.blurred[int(center[1]),int((center[0]))]
+						# color = lo.blurred[int(center[1]),int((center[0]))]
 
 						if (cX >= 480):
 							cX = 479
@@ -151,9 +183,10 @@ if __name__=="__main__":
 							cX = 1
 
 
-						color = fc.blurred[(cX,cY)]
+						color = lo.blurred[(cX,cY)]
 
-						fc.colorcompare(color) #Find the closest matching color in the HSV colorspace
+						lo.colorcompare(color) #Find the closest matching color in the HSV colorspace
+						# [pt_angle, obj_spd] = lo.objectpoint(thetalist,tracked_cnt,t.dist)
 
 			cv2.imshow("Camera", t.frame)
 
