@@ -158,16 +158,30 @@ class Locate_Object(object):
 		coords = passed_coords
 		dist = passed_dist
 
-		if (area <= 9.0): #inches
-			lo.objsize = "Small"
-		else if ((area > 9.0) && (area <= 25.0)):
-			lo.objsize = "Medium"
-		else if (area > 25.0):
-			lo.objsize = "Large"
+		if ((lo.finalpubval == None)||((lo.finalpubval != None)&&(dist > lo.finalpubval[1]))): #If there is no final published value, publish one. If there is already a value present, determine which is closer.
+			if (area <= 9.0): #inches
+				lo.objsize = "Small"
+			else if ((area > 9.0) && (area <= 25.0)):
+				lo.objsize = "Medium"
+			else if (area > 25.0):
+				lo.objsize = "Large"
 
-		if (objcolor.lower() == pi.color.lower()): #If the object color matches the target color...
-			if (objsize.lower() == pi.size.lower()): #If the object size matches the target size...
-				finalpubval = [coords,dist]
+			if (objcolor.lower() == pi.color.lower()): #If the object color matches the target color...
+				if (objsize.lower() == pi.size.lower()): #If the object size matches the target size...
+					lo.finalpubval = [coords,dist]
+		else:
+			pass
+
+
+	def CoordPub():
+		[coords,dist] = lo.finalpubval
+
+	    pub = rospy.Publisher('obj_pos', Point, queue_size=10)
+	    rospy.init_node('coord_data', anonymous=True)
+	    rate = rospy.Rate(10) # 10hz
+	    while not rospy.is_shutdown():
+	        pub.publish(coords)
+	        rate.sleep()
 
 	# def objectpoint(self, theta, dist):
 	# 	area = areacalc(tracked_cnt,dist)
@@ -236,10 +250,12 @@ if __name__=="__main__":
 
 						# [pt_angle, obj_spd] = lo.objectpoint(thetalist,tracked_cnt,t.dist)
 
-			pub = rospy.Publisher('obj_pos', Point, queue_size=10)
+				cv2.imshow("Camera", t.frame)
 
-			publish valuesssssssss
-			cv2.imshow("Camera", t.frame)
+		try:
+	        CoordPub()
+	    except rospy.ROSInterruptException:
+	        pass
 
 		key = cv2.waitKey(1) & 0xFF
 		# if the `q` key is pressed, break from the lop
