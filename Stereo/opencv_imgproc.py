@@ -28,12 +28,18 @@ bksub = BackgroundSubtractor()
 sgbm = SGBM()
 
 
-def handle_disp(im_l, im_r):
-    disp = sgbm.apply(im_l, im_r)
-    disp = cv2.GaussianBlur(disp,(13,13),0) 
-    _, disp = cv2.threshold(disp, 128, 255, cv2.THRESH_BINARY)
+def projectDisparityTo3d(x,y,Q,d):
+    x,y,z = (Q[0,0]*x + Q[0,3], Q[1,1]*y + Q[1,3], Q[2,3])
+    w = Q[3,2]*d + Q[3,3]
+    return (x/w, y/w, z/w)
 
-    return disp #detector.apply(disp), disp
+def handle_disp(im_l, im_r, Q):
+    raw_disp = sgbm.apply(im_l, im_r)
+
+    disp = cv2.normalize(raw_disp,None,0,255,cv2.NORM_MINMAX).astype(np.uint8)
+    disp = cv2.GaussianBlur(disp,(13,13),0) 
+    #_, disp = cv2.threshold(disp, 128, 255, cv2.THRESH_BINARY)
+    return disp, raw_disp #detector.apply(disp), disp
 
 def handle_opt(im):
     global opt
@@ -53,7 +59,60 @@ def handle_bksub(im):
     mask = bksub.apply(im) 
     return mask #detector.apply(mask), mask
 
-def main():
+def demo():
+    # returns raw image, distance map, and mask of where objects are not
+
+    # initialize rectifier
+    rospack = rospkg.RosPack()
+    pkg_root = rospack.get_path('edwin')
+
+    rectifier = Rectifier(
+            param_l = os.path.join(pkg_root, 'Stereo/camera_info/left_camera.yaml'),
+            param_r = os.path.join(pkg_root, 'Stereo/camera_info/right_camera.yaml')
+            )
+
+    cam_l = cv2.VideoCapture(1)
+    cam_r = cv2.VideoCapture(2)
+
+    cnt = 0
+    while True:
+        _, left = cam_l.read()
+        _, right = cam_r.read()
+        im_l, im_r = rectifier.apply(left, right)
+
+        im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
+
+        # Now Apply Blur ...
+        blur = cv2.GaussianBlur(im_l,(3,3),0) 
+        
+        im_opt = handle_opt(blur)
+        im_bksub = handle_bksub(blur)
+
+        # rudimentary, combine detection data
+        im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
+        im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
+
+        cv2.imshow("im_disp", im_disp)
+        #cv2.imshow("im_opt", im_opt)
+        #cv2.imshow("im_bksub", im_bksub)
+        #cv2.imshow("im_comb", im_comb)
+
+        #rect = detector.apply(im_comb)
+
+        identified = im_l.copy()
+
+        dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
+
+        obj = lydia(im_l,dist,im_comb) # lydia's code here
+
+        cv2.imshow("identified", identified)
+
+        cv2.waitKey(1)
+
+
+    cv2.destroyAllWindows()
+
+def generate_dataset():
 
     ## Initialize Rectifier
     rospack = rospkg.RosPack()
@@ -80,14 +139,16 @@ def main():
         _, right = cam_r.read()
         im_l, im_r = rectifier.apply(left, right)
 
-        im_disp = handle_disp(im_l, im_r)
+        im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
 
+        #print pcl[:,:,2]
+        #cv2.imshow('pcl', pcl)
 
         # Now Apply Blur ...
-        im_l = cv2.GaussianBlur(im_l,(3,3),0) 
+        blur = cv2.GaussianBlur(im_l,(3,3),0) 
         
-        im_opt = handle_opt(im_l)
-        im_bksub = handle_bksub(im_l)
+        im_opt = handle_opt(blur)
+        im_bksub = handle_bksub(blur)
 
         # rudimentary, combine detection data
         im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
@@ -101,7 +162,7 @@ def main():
 
         #im_comb = cv2.dilate(im_comb, k_dilate, iterations = 3) 
 
-        #cv2.imshow("im_disp", im_disp)
+        cv2.imshow("im_disp", im_disp)
         #cv2.imshow("im_opt", im_opt)
         #cv2.imshow("im_bksub", im_bksub)
         #cv2.imshow("im_comb", im_comb)
@@ -109,13 +170,21 @@ def main():
 
         identified = im_l.copy()
 
+        #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
+
         if rect != None:
-            x,y,w,h = rect
+            x,y,w,h,m = rect
+
             if w*h < 100000:
                 cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
                 cropped = im_l[y:y+h,x:x+w]
                 cv2.imshow("cropped", cropped)
-                cv2.imwrite("data_%d.png" % cnt, cropped)
+
+                cX = int(m["m10"] / m["m00"])
+                cY = int(m["m01"] / m["m00"])
+                cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
+                print projectDisparityTo3d(cX, cY, rectifier.Q,  raw_disp[cY,cX]) # for single point
+                #cv2.imwrite("data_%d.png" % cnt, cropped)
                 cnt += 1
 
         cv2.imshow("identified", identified)
@@ -124,6 +193,9 @@ def main():
 
 
     cv2.destroyAllWindows()
+
+def main():
+    demo()
 
 if __name__ == '__main__':
     main()
