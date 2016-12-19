@@ -2,9 +2,6 @@ import numpy as np
 import cv2
 
 MIN_MATCH_COUNT = 10
-cam = cv2.VideoCapture(0)
-
-imgs = []
 
 def drawMatches(img1, kp1, img2, kp2, matches):
     """
@@ -72,61 +69,75 @@ def drawMatches(img1, kp1, img2, kp2, matches):
     # Also return the image if you'd like a copy
     return out
 
-# Descriptor
-orb = cv2.ORB()
-brisk = cv2.BRISK()
+class Matcher(object):
+    def __init__(self):
+        # Descriptor
+        orb = cv2.ORB()
+        brisk = cv2.BRISK()
 
-# Matcher
-FLANN_INDEX_KDTREE = 0
-index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-search_params = dict(checks = 50)
-flann = cv2.FlannBasedMatcher(index_params, search_params)
-bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        # Matcher
+        FLANN_INDEX_KDTREE = 0
+        index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+        search_params = dict(checks = 50)
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-descriptor = orb 
-matcher = flann
+        self.descriptor = orb 
+        self.matcher = flann
+    def match(self,img1,img2,draw=False):
+        kp1, des1 = self.descriptor.detectAndCompute(img1,None)
+        kp2, des2 = self.descriptor.detectAndCompute(img2,None)
+        try:
+            if(des1.dtype != np.float32):
+                des1 = des1.astype(np.float32)
+            if(des2.dtype != np.float32):
+                des2 = des2.astype(np.float32)
+            matches = self.matcher.knnMatch(des1,des2,k=2)
+            # store all the good matches as per Lowe's ratio test.
+            good = []
+            dists = []
+            for m,n in matches:
+                if m.distance < 0.8*n.distance:
+                    good.append(m)
+                    dists.append(m.distance)
+            if draw:
+                img3 = drawMatches(img1,kp1,img2,kp2,good)
+                return (len(good) > 0), img3
+            else:
+                return len(good)
+        except:
+            return False, img1
 
-freeze = False
-img1 = None
+if __name__ == "__main__":
+    matcher = Matcher()
 
-while True:
-    _, img = cam.read()
-    imgs.append(img)
-    if(len(imgs) > 10):
-        del imgs[0]
+    freeze = False
 
-        if not freeze:
+    imgs = []
+    img1 = None
+
+    cam = cv2.VideoCapture(0)
+
+    while True:
+        _, img = cam.read()
+        imgs.append(img)
+        if(len(imgs) > 10):
+            del imgs[0]
+
+            if not freeze:
+                img1 = imgs[0][320:,240:]
+
+            same,match_frame = matcher.match(img1, imgs[-1],draw=True)
+
+            if same:
+                cv2.imshow('matches',match_frame)
+            else:
+                print 'no matches'
+
+        k = cv2.waitKey(20)
+        if k == 27:
+            break
+        elif k == 32:
+            freeze = True
             img1 = imgs[0][320:,240:]
 
-        kp1, des1 = descriptor.detectAndCompute(img1,None)
-        kp2, des2 = descriptor.detectAndCompute(imgs[-1],None)
-
-        if(des1.dtype != np.float32):
-            des1 = des1.astype(np.float32)
-        if(des2.dtype != np.float32):
-            des2 = des2.astype(np.float32)
-
-        matches = matcher.knnMatch(des1,des2,k=2)
-
-        # store all the good matches as per Lowe's ratio test.
-        good = []
-        dists = []
-        for m,n in matches:
-            if m.distance < 0.8*n.distance:
-                good.append(m)
-                dists.append(m.distance)
-
-            #if m.distance < 0.7*n.distance:
-            #    good.append(m)
-        if len(dists) > 0:
-            print np.min(dists)
-            img3 = drawMatches(img1,kp1,imgs[-1],kp2,good)
-            cv2.imshow('matches',img3)
-        else:
-            print 'no matches'
-    k = cv2.waitKey(20)
-    if k == 27:
-        break
-    elif k == 32:
-        freeze = True
-        img1 = imgs[0][320:,240:]

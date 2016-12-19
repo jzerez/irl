@@ -20,6 +20,7 @@ from optical_flow import *
 
 # IMG Rectification
 from image_rectification import Rectifier, SGBM
+from match import Matcher
 
 ## Global Variables
 opt = None
@@ -74,15 +75,16 @@ def demo():
     cam_r = cv2.VideoCapture(1)
 
     cnt = 0
+
+    last_cropped = None
+    matcher = Matcher()
+
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
         im_l, im_r = rectifier.apply(left, right)
 
         im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
-
-        print np.max(raw_disp)
-        print np.min(raw_disp)
 
         # Now Apply Blur ...
         blur = cv2.GaussianBlur(im_l,(3,3),0) 
@@ -106,6 +108,27 @@ def demo():
 
         dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
 
+        rect = detector.apply(im_comb)
+        if rect != None:
+            x,y,w,h,m = rect
+            if w*h < 100000:
+                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+                cropped = im_l[y:y+h,x:x+w]
+
+                cX = int(m["m10"] / m["m00"])
+                cY = int(m["m01"] / m["m00"])
+                cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
+                #print projectDisparityTo3d(cX, cY, rectifier.Q,  raw_disp[cY,cX]) # for single point
+
+                if last_cropped != None:
+                    same, match_frame= matcher.match(last_cropped, cropped, draw=True)
+                    print same
+                    cv2.imshow("match", match_frame)
+                last_cropped = cropped
+
+
+                #cv2.imwrite("data_%d.png" % cnt, cropped)
+                cnt += 1
         #obj = lydia(im_l,dist,im_comb) # lydia's code here
 
         cv2.imshow("identified", identified)
@@ -135,8 +158,8 @@ def generate_dataset():
             [.07,.12,.07]
             ],np.float32)
 
-
     cnt = 0
+    last_cropped = None
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
@@ -174,14 +197,13 @@ def generate_dataset():
         identified = im_l.copy()
 
         #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
-
         if rect != None:
             x,y,w,h,m = rect
 
             if w*h < 100000:
                 cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
                 cropped = im_l[y:y+h,x:x+w]
-                cv2.imshow("cropped", cropped)
+                #cv2.imshow("cropped", cropped)
 
                 cX = int(m["m10"] / m["m00"])
                 cY = int(m["m01"] / m["m00"])
