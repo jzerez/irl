@@ -20,13 +20,13 @@ from optical_flow import *
 
 # IMG Rectification
 from image_rectification import Rectifier, SGBM
+from match import Matcher
 
 ## Global Variables
 opt = None
 detector = BlobDetector()
 bksub = BackgroundSubtractor()
 sgbm = SGBM()
-
 
 def projectDisparityTo3d(x,y,Q,d):
     x,y,z = (Q[0,0]*x + Q[0,3], Q[1,1]*y + Q[1,3], Q[2,3])
@@ -71,10 +71,14 @@ def demo():
             param_r = os.path.join(pkg_root, 'Stereo/camera_info/right_camera.yaml')
             )
 
-    cam_l = cv2.VideoCapture(1)
-    cam_r = cv2.VideoCapture(2)
+    cam_l = cv2.VideoCapture(2)
+    cam_r = cv2.VideoCapture(1)
 
     cnt = 0
+
+    last_cropped = None
+    matcher = Matcher()
+
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
@@ -92,10 +96,11 @@ def demo():
         im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
         im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
 
+        _, im_comb = cv2.threshold(im_comb, 30, 255, cv2.THRESH_BINARY)
         cv2.imshow("im_disp", im_disp)
         #cv2.imshow("im_opt", im_opt)
         #cv2.imshow("im_bksub", im_bksub)
-        #cv2.imshow("im_comb", im_comb)
+        cv2.imshow("im_comb", im_comb)
 
         #rect = detector.apply(im_comb)
 
@@ -103,7 +108,28 @@ def demo():
 
         dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
 
-        obj = lydia(im_l,dist,im_comb) # lydia's code here
+        rect = detector.apply(im_comb)
+        if rect != None:
+            x,y,w,h,m = rect
+            if w*h < 100000:
+                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+                cropped = im_l[y:y+h,x:x+w]
+
+                cX = int(m["m10"] / m["m00"])
+                cY = int(m["m01"] / m["m00"])
+                cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
+                #print projectDisparityTo3d(cX, cY, rectifier.Q,  raw_disp[cY,cX]) # for single point
+
+                if last_cropped != None:
+                    same, match_frame= matcher.match(last_cropped, cropped, draw=True)
+                    print same
+                    cv2.imshow("match", match_frame)
+                last_cropped = cropped
+
+
+                #cv2.imwrite("data_%d.png" % cnt, cropped)
+                cnt += 1
+        #obj = lydia(im_l,dist,im_comb) # lydia's code here
 
         cv2.imshow("identified", identified)
 
@@ -118,8 +144,8 @@ def generate_dataset():
     rospack = rospkg.RosPack()
     pkg_root = rospack.get_path('edwin')
 
-    cam_l = cv2.VideoCapture(1)
-    cam_r = cv2.VideoCapture(2)
+    cam_l = cv2.VideoCapture(2)
+    cam_r = cv2.VideoCapture(1)
 
     rectifier = Rectifier(
             param_l = os.path.join(pkg_root, 'Stereo/camera_info/left_camera.yaml'),
@@ -132,8 +158,8 @@ def generate_dataset():
             [.07,.12,.07]
             ],np.float32)
 
-
     cnt = 0
+    last_cropped = None
     while True:
         _, left = cam_l.read()
         _, right = cam_r.read()
@@ -171,14 +197,13 @@ def generate_dataset():
         identified = im_l.copy()
 
         #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
-
         if rect != None:
             x,y,w,h,m = rect
 
             if w*h < 100000:
                 cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
                 cropped = im_l[y:y+h,x:x+w]
-                cv2.imshow("cropped", cropped)
+                #cv2.imshow("cropped", cropped)
 
                 cX = int(m["m10"] / m["m00"])
                 cY = int(m["m01"] / m["m00"])

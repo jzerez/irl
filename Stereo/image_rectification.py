@@ -57,9 +57,12 @@ class SGBM(object):
     def __init__(self):
         # fixed parameters for current oCam setup
         # StereoSGBM([minDisparity, numDisparities, SADWindowSize[, P1[, P2[, disp12MaxDiff[, preFilterCap[, uniquenessRatio[, speckleWindowSize[, speckleRange[, fullDP]]]]]]]]]) -> <StereoSGBM object>
-        self.sgbm = cv2.StereoSGBM(0, 128, 9, 4000, 4000, 0, 31, 4, 1000, 5, False)
+        self.bm = cv2.StereoSGBM(0, 64, 13, 200, 400, 0, 30, 15, 100, 4, False)
+        #self.sgbm = cv2.StereoBM(cv2.STEREO_BM_BASIC_PRESET, 16, 5)
     def apply(self, im_l, im_r):
-        disp = self.sgbm.compute(im_l, im_r)
+        #im_l =  cv2.cvtColor(im_l, cv2.COLOR_BGR2GRAY)
+        #im_r =  cv2.cvtColor(im_r, cv2.COLOR_BGR2GRAY)
+        disp = self.bm.compute(im_l, im_r)
         return disp
 
 if __name__ == "__main__":
@@ -67,8 +70,8 @@ if __name__ == "__main__":
     rospack = rospkg.RosPack()
     pkg_root = rospack.get_path('edwin')
 
-    cam_l = cv2.VideoCapture(1)
-    cam_r = cv2.VideoCapture(2)
+    cam_l = cv2.VideoCapture(2)
+    cam_r = cv2.VideoCapture(1)
 
     rect = Rectifier(
             param_l = os.path.join(pkg_root, 'Stereo/camera_info/left_camera.yaml'),
@@ -81,7 +84,14 @@ if __name__ == "__main__":
         _, left = cam_l.read()
         _, right = cam_r.read()
         im_l, im_r = rect.apply(left, right)
-        disp = sgbm.apply(im_l, im_r)
+        disp = sgbm.apply(im_l, im_r).astype(np.float32)
+
+        #mn = disp.min()
+        #mx = disp.max()
+        #disp = (disp+mn) * (255 / (mx - mn))
+        #disp = disp.astype(np.uint8)
+
+        disp = cv2.normalize(disp, None, 0.0, 255.0, cv2.NORM_MINMAX).astype(np.uint8)
 
         cv2.imshow("left", im_l)
         cv2.imshow("right", im_r)
