@@ -10,18 +10,20 @@ import cv2
 import imutils
 import numpy as np
 import argparse
+import rospy
+from geometry_msgs import Point
 from background_subtraction import BackgroundSubtractor
 
 bksub = BackgroundSubtractor()
 
 class Target(object):
-	def __init__(self, umod_frame, dist, bkg_mask):
+	def __init__(self, passed_umod_frame, passed_dist, passed_bkg_mask):
 		self.input = "small blue object"
 
-		self.frame = umod_frame
+		self.frame = passed_umod_frame
 		(rows,cols,color) = dim.shape
 		self.dim = [rows,cols]
-		self.dist = dist
+		self.dist = passed_dist
 
 		#Camera FoV info
 		self.xFoV = 32.5 #Degrees, the field of vision on the x axis
@@ -34,7 +36,7 @@ class Target(object):
 		self.args = vars(ap.parse_args())
 
 		self.count = 0
-		self.bkg_mask = bkg_mask
+		self.bkg_mask = passed_bkg_mask
 
 		self.redLower = (0, 100, 100)
 		self.redUpper = (30, 255, 255)
@@ -53,14 +55,16 @@ class Target(object):
 		self.objectlist = []#[[0,(0,0),'Null']] # Contour area, XY coordinates.
 
 class Process_Info(object):
-	def __init__(self, command):
-		cmdstr = command
+	def __init__(self, passed_command):
+		cmdstr = passed_command
 
 		colors = ['blue', 'red', 'green']
 		sizes = ['small', 'medium', 'large']
 
 		cmdwrds = cmdstr.split()
+		self.findcommands(colors, sizes, cmdwrds)
 
+	def findcommands(self, passed_colors, passed_sizes, passed_cmdwrds)
 		for word in cmdwrds:
 			for color in colors:
 				if word.lower() == color.lower():
@@ -70,10 +74,27 @@ class Process_Info(object):
 					self.size = size
 		print "Looking for a %s %s thing!".format{self.size, self.color}
 
+	def newcommand(self, passed_command):
+		cmdstr = passed_command
+
+		colors = ['blue', 'red', 'green']
+		sizes = ['small', 'medium', 'large']
+
+		cmdwrds = cmdstr.split()
+
+		self.objcolor = "Null"
+		self.objsize = "Null"
+		self.finalpubval = [] #[x,y,dist]
+
+		self.findcommands(colors, sizes, cmdwrds)
+
+
 class Locate_Object(object):
 	def __init__(self, frame):
 		self.blurred = cv2.GaussianBlur(frame, (21, 21), 0)
 		self.objcolor = "Null"
+		self.objsize = "Null"
+		self.finalpubval = [] #[x,y,dist]
 
 	def findobject(self):
 		temp = False
@@ -95,8 +116,9 @@ class Locate_Object(object):
 			print lo.objcolor
 			print 'List is now: ' , t.objectlist
 
-	def areacalc(self, contour, dist):
+	def areacalc(self, contour, passed_dist):
 		[xdim,ydim] = t.dim
+		dist = passed_dist
 
 		x,y,w,h = cv2.boundingRect(contour)
 		centerx = x+(0.5*w)
@@ -116,7 +138,8 @@ class Locate_Object(object):
 		ylength = ymax_length - ymin_length
 
 		area = xwidth * ylength
-		return [area,thetalist]
+		coords = [x,y]
+		return [area,coords]
 
 	def colorcompare(self, color):
 		if (((color[0] <= t.redUpper[0]) and (color[0] >= t.redLower[0])) or ((color[0] <= t.redUpper1[0]) and (color[0] >= t.redLower1[0]))):
@@ -129,6 +152,23 @@ class Locate_Object(object):
 			lo.objcolor = "Blue"
 			lo.findobject()
 
+	def passcoords(self, passed_color, passed_area, passed_coords, passed_dist):
+		objcolor = passed_color
+		area = passed_area
+		coords = passed_coords
+		dist = passed_dist
+
+		if (area <= 9.0): #inches
+			lo.objsize = "Small"
+		else if ((area > 9.0) && (area <= 25.0)):
+			lo.objsize = "Medium"
+		else if (area > 25.0):
+			lo.objsize = "Large"
+
+		if (objcolor.lower() == pi.color.lower()): #If the object color matches the target color...
+			if (objsize.lower() == pi.size.lower()): #If the object size matches the target size...
+				finalpubval = [coords,dist]
+
 	# def objectpoint(self, theta, dist):
 	# 	area = areacalc(tracked_cnt,dist)
 	# 	[xmin_theta,xmax_theta,ymin_theta,ymax_theta] = theta
@@ -137,8 +177,14 @@ class Locate_Object(object):
 	# 	objspd = 1.0
 	# 	return [pt_angle, obj_spd]
 
+
+
+
 if __name__=="__main__":
 
+	command = "small blue object"
+
+	pi = Process_Info(command)
 	t = Target(umod_frame, dist, bkg_mask)
 
 	while True:
@@ -157,7 +203,7 @@ if __name__=="__main__":
 					continue
 				else:
 					(center,radius) = cv2.minEnclosingCircle(c)
-					[area, thetalist] = lo.areacalc(t.frame,c,t.dist) #Find the area of the contour
+					[area, coords] = lo.areacalc(t.frame,c,t.dist) #Find the area of the contour
 					# if radius >= 50:
 					if area >= 100:
 						M = cv2.moments(c)
@@ -186,8 +232,13 @@ if __name__=="__main__":
 						color = lo.blurred[(cX,cY)]
 
 						lo.colorcompare(color) #Find the closest matching color in the HSV colorspace
+						lo.passcoords(lo.objcolor, area, coords, t.dist) #Check to see if object stats match object being tracked, then transmit obj. coords
+
 						# [pt_angle, obj_spd] = lo.objectpoint(thetalist,tracked_cnt,t.dist)
 
+			pub = rospy.Publisher('obj_pos', Point, queue_size=10)
+
+			publish valuesssssssss
 			cv2.imshow("Camera", t.frame)
 
 		key = cv2.waitKey(1) & 0xFF
