@@ -2,7 +2,7 @@
 	<arg name="calibrate" default="false"/>
 
 	<!-- Run Camera -->
-	<node name="camera" ns="my_stereo" pkg="uvc_camera" type="uvc_stereo_node" args="_left/device:=/dev/video2 _right/device:=/dev/video1" />
+	<node name="camera" ns="my_stereo" pkg="uvc_camera" type="uvc_stereo_node" args="_left/device:=/dev/video1 _right/device:=/dev/video2" />
 
 	<!-- Run Calibrations -->
 	<group if="$(arg calibrate)" ns="my_stereo">

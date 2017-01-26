@@ -20,6 +20,8 @@ MIN_AREA = 10000
 MAX_DIST = 10
 k_dilate = cv2.getStructuringElement(cv2.MORPH_DILATE, (5,5),(2,2))
 
+matcher = Matcher()
+
 def within(low,x,high):
     return low < x and x < high
 
@@ -81,10 +83,10 @@ class Target(object):
         self.greenLower = 30
         self.greenUpper = 80
 
-        self.blueLower = 70
-        self.blueUpper = 135
+        self.blueLower = 100
+        self.blueUpper = 120
 
-        self.size = 'small'
+        self.size = 'medium'
         self.color = 'blue'
 
     def set(self, size, color):
@@ -216,6 +218,8 @@ class Object(object):
         self.color = color
         self.pos = pos
         self.size = size # --> real area
+    def __eq__(self, other):
+        return matcher.match(self.img, other.img)
 
 class ObjectTracker(object):
     def __init__(self):
@@ -226,7 +230,6 @@ class ObjectTracker(object):
 
         self.process_info = Process_Info()
         self.locate_object = Locate_Object()
-        self.matcher = Matcher()
 
         #rospy.init_node('coord_data', anonymous=True)
         self.sub = rospy.Subscriber('cmd', String, self.cmd_cb) # Check that this works

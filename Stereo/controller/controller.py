@@ -38,7 +38,7 @@ def get_pos(msg):
 def main():
     global x,y
     fov = np.deg2rad(65)
-    pid = PID(1.0,0.05,0.01)
+    pid = PID(2.0,0.05,0.01)
 
     rospy.init_node('demo')
     rate = rospy.Rate(100.0)

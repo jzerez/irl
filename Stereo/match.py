@@ -82,8 +82,11 @@ class Matcher(object):
         flann = cv2.FlannBasedMatcher(index_params, search_params)
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
+        # choose descriptor and matcher
+
         self.descriptor = orb 
         self.matcher = flann
+
     def match(self,img1,img2,draw=False):
         kp1, des1 = self.descriptor.detectAndCompute(img1,None)
         kp2, des2 = self.descriptor.detectAndCompute(img2,None)

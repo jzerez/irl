@@ -32,6 +32,33 @@ sgbm = SGBM()
 
 k_dilate = cv2.getStructuringElement(cv2.MORPH_DILATE, (7,7),(3,3))
 
+def neighborhood(x,y,n):
+    #v = np.round(np.linspace(-n/2.,n/2.,n))
+    v = np.linspace(-n/2.,n/2.,n,dtype=np.int)
+    xs,ys = x+v,y+v
+    return xs,ys
+
+class ObjectManager(object):
+    def __init__(self):
+        self.current_index = 0
+        self.objects = {} # dictionary of 'name, list of object'
+    def add(self, new_object):
+        for k,v in self.objects.iteritems():
+            found = False
+            l_v = len(v)
+            for obj in np.random.choice(v,max(l_v,10)):
+                if obj == new_object: #"same object"
+                    v.append(new_object)
+                    found = True
+                    break
+            if found:
+                break
+        else:
+            new_name = 'object_{}'.format(self.current_index)
+            self.objects[new_name] = [new_object]
+            self.current_index += 1
+            # no match
+
 def projectDisparityTo3d(x,y,Q,d):
     x,y,z = (Q[0,0]*x + Q[0,3], Q[1,1]*y + Q[1,3], Q[2,3])
     w = Q[3,2]*d + Q[3,3]
@@ -92,8 +119,8 @@ def demo():
             param_r = os.path.join(pkg_root, 'Stereo/camera_info/right_camera.yaml')
             )
 
-    cam_l = cv2.VideoCapture(2)
-    cam_r = cv2.VideoCapture(1)
+    cam_l = cv2.VideoCapture(1)
+    cam_r = cv2.VideoCapture(2)
 
     cnt = 0
 
@@ -109,6 +136,7 @@ def demo():
         im_l, im_r = rectifier.apply(left, right)
 
         im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
+        cv2.imshow('im_disp', im_disp)
 
         # Now Apply Blur ...
         blur = cv2.GaussianBlur(im_l,(3,3),0) 
@@ -120,42 +148,56 @@ def demo():
         im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
         im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
 
-        cv2.imshow("im_disp", im_disp)
+        cv2.imshow("raw_disp", raw_disp)
         _, im_comb = cv2.threshold(im_comb, 30, 255, cv2.THRESH_BINARY)
         cv2.imshow("im_comb", im_comb)
         #cv2.imshow("im_opt", im_opt)
         #cv2.imshow("im_bksub", im_bksub)
 
         #rect = detector.apply(im_comb)
-
         identified = im_l.copy()
 
-        dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
-        target_pos, target_img = tracker.apply(im_comb, im_l, dist)
-        print 'target_pos', target_pos
-        if target_img != None:
-            cv2.imshow('target_img', target_img)
-        cv2.circle(identified, target_pos, 10, (255,255,255), 2)
+        #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True) # for all of disparity map
+        #print dist
+        #target_pos, target_img = tracker.apply(im_comb, im_l, dist)
+        #print 'target_pos', target_pos
+        #if target_img != None:
+        #    cv2.imshow('target_img', target_img)
+        #cv2.circle(identified, target_pos, 10, (255,255,255), 2)
 
-        #rect = detector.apply(im_comb)
-        #if rect != None:
-        #    x,y,w,h,m = rect
-        #    if w*h < 100000:
-        #        cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
-        #        cropped = im_l[y:y+h,x:x+w]
+        rect = detector.apply(im_comb)
+        if rect != None:
+            x,y,w,h,m = rect
+            if w*h > 100*100:
+                cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
+                cropped = im_l[y:y+h,x:x+w]
 
-        #        cX = int(m["m10"] / m["m00"])
-        #        cY = int(m["m01"] / m["m00"])
-        #        cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
-        #        #print projectDisparityTo3d(cX, cY, rectifier.Q,  raw_disp[cY,cX]) # for single point
+                cX = int(m["m10"] / m["m00"])
+                cY = int(m["m01"] / m["m00"])
+                #cX,cY = 320,240
 
-        #        if last_cropped != None:
-        #            same, match_frame= matcher.match(last_cropped, cropped, draw=True)
-        #            print same
-        #            cv2.imshow("match", match_frame)
-        #        last_cropped = cropped
-        #        #cv2.imwrite("data_%d.png" % cnt, cropped)
-        #        cnt += 1
+                cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
+
+                #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True)
+                xs,ys = neighborhood(cX,cY,5)
+                dists = []
+                for x in xs:
+                    for y in ys:
+                        dist = projectDisparityTo3d(x, y, rectifier.Q, raw_disp[cY,cX]/16.) # for single point
+                        dist = np.linalg.norm(dist)
+                        if 0 < dist and dist < 5: # within reasonable range
+                            dists.append(dist)
+                print np.median(dists)
+
+                #if last_cropped != None:
+                #    same, match_frame= matcher.match(last_cropped, cropped, draw=True)
+                #    print same
+                #    cv2.imshow("match", match_frame)
+                #last_cropped = cropped
+
+                ### WRITE TO FILE ###
+                #cv2.imwrite("data_%d.png" % cnt, cropped)
+                cnt += 1
 
         cv2.imshow("identified", identified)
         cv2.waitKey(1)
