@@ -103,11 +103,16 @@ class Matcher(object):
                 if m.distance < 0.8*n.distance:
                     good.append(m)
                     dists.append(m.distance)
+
+            ratio = float(len(good)) / (len(kp1) + len(kp2))
+
+            found_match = (ratio > 0.025)
+
             if draw:
                 img3 = drawMatches(img1,kp1,img2,kp2,good)
-                return (len(good) > 0), img3
+                return found_match, img3
             else:
-                return len(good)
+                return found_match 
         except:
             return False, img1
 

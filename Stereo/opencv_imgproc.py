@@ -22,7 +22,7 @@ from optical_flow import *
 # IMG Rectification
 from image_rectification import Rectifier, SGBM
 from match import Matcher
-from better_objecttracker import ObjectTracker
+from better_objecttracker import Object, ObjectTracker
 
 ## Global Variables
 opt = None
@@ -31,6 +31,9 @@ bksub = BackgroundSubtractor()
 sgbm = SGBM()
 
 k_dilate = cv2.getStructuringElement(cv2.MORPH_DILATE, (7,7),(3,3))
+k_erode = cv2.getStructuringElement(cv2.MORPH_ERODE, (3,3))
+k_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
+
 
 def neighborhood(x,y,n):
     #v = np.round(np.linspace(-n/2.,n/2.,n))
@@ -43,18 +46,22 @@ class ObjectManager(object):
         self.current_index = 0
         self.objects = {} # dictionary of 'name, list of object'
     def add(self, new_object):
+        if len(self.objects) > 0:
+            cv2.imshow('object', self.objects.values()[-1][0].img)
+
+        obj_found = False
         for k,v in self.objects.iteritems():
-            found = False
             l_v = len(v)
-            for obj in np.random.choice(v,max(l_v,10)):
+            for obj in np.random.choice(v,min(l_v,10)):
                 if obj == new_object: #"same object"
                     v.append(new_object)
-                    found = True
+                    obj_found = True
                     break
-            if found:
+            if obj_found:
                 break
         else:
             new_name = 'object_{}'.format(self.current_index)
+            print new_name
             self.objects[new_name] = [new_object]
             self.current_index += 1
             # no match
@@ -71,7 +78,7 @@ def handle_disp(im_l, im_r, Q):
 
     disp = cv2.normalize(raw_disp,None,0,255,cv2.NORM_MINMAX).astype(np.uint8)
     disp = cv2.GaussianBlur(disp,(13,13),0) 
-    #_, disp = cv2.threshold(disp, 128, 255, cv2.THRESH_BINARY)
+    _, disp = cv2.threshold(disp, 128, 255, cv2.THRESH_BINARY)
     return disp, raw_disp #detector.apply(disp), disp
 
 def handle_opt(im):
@@ -90,6 +97,10 @@ def handle_opt(im):
 
 def handle_bksub(im):
     mask = bksub.apply(im) 
+    mask = cv2.dilate(mask, k_dilate, iterations=2)
+    mask = cv2.GaussianBlur(mask,(3,3),0)
+    mask = cv2.morphologyEx(mask,cv2.MORPH_CLOSE,k_close)
+
     return mask #detector.apply(mask), mask
 
 def fill_holes(mask):
@@ -127,8 +138,13 @@ def demo():
     last_cropped = None
     matcher = Matcher()
     tracker = ObjectTracker()
+    manager = ObjectManager()
 
     tracker.set_target('medium','blue')
+
+    for i in range(10):
+        cam_l.read()
+        cam_r.read()
 
     while not rospy.is_shutdown():
         _, left = cam_l.read()
@@ -136,7 +152,16 @@ def demo():
         im_l, im_r = rectifier.apply(left, right)
 
         im_disp, raw_disp = handle_disp(im_l, im_r, rectifier.Q)
-        cv2.imshow('im_disp', im_disp)
+
+        raw_dist = cv2.reprojectImageTo3D((raw_disp/16.).astype(np.float32), rectifier.Q, handleMissingValues=True)
+        #dist = np.linalg.norm(dist,axis=2)
+        dist = raw_dist[:,:,2]
+        _,dist = cv2.threshold(dist, 1.0, 1.0, cv2.THRESH_BINARY_INV)
+        dist = (dist*255).astype(np.uint8)
+        dist = cv2.erode(dist, k_erode)
+
+        #cv2.imshow('im_disp', im_disp)
+        cv2.imshow('dist', dist)
 
         # Now Apply Blur ...
         blur = cv2.GaussianBlur(im_l,(3,3),0) 
@@ -145,14 +170,15 @@ def demo():
         im_bksub = handle_bksub(blur)
 
         # rudimentary, combine detection data
-        im_t = cv2.addWeighted(im_disp, 0.5, im_opt, 0.5, 0)
+        im_t = cv2.addWeighted(dist, 0.5, im_opt, 0.5, 0)
         im_comb = cv2.addWeighted(im_t, 2./3, im_bksub, 1./3, 0)
 
-        cv2.imshow("raw_disp", raw_disp)
-        _, im_comb = cv2.threshold(im_comb, 30, 255, cv2.THRESH_BINARY)
+
+        #cv2.imshow("raw_disp", raw_disp)
+        _, im_comb = cv2.threshold(im_comb, 128, 255, cv2.THRESH_BINARY)
         cv2.imshow("im_comb", im_comb)
-        #cv2.imshow("im_opt", im_opt)
-        #cv2.imshow("im_bksub", im_bksub)
+        cv2.imshow("im_opt", im_opt)
+        cv2.imshow("im_bksub", im_bksub)
 
         #rect = detector.apply(im_comb)
         identified = im_l.copy()
@@ -165,10 +191,10 @@ def demo():
         #    cv2.imshow('target_img', target_img)
         #cv2.circle(identified, target_pos, 10, (255,255,255), 2)
 
-        rect = detector.apply(im_comb)
-        if rect != None:
-            x,y,w,h,m = rect
-            if w*h > 100*100:
+        ret = detector.apply(im_comb)
+        if ret != None:
+            x,y,w,h,m,a = ret
+            if w*h > 100*100: # bigger than 100x100 px
                 cv2.rectangle(identified, (x,y), (x+w, y+h), (255,0,0),2)
                 cropped = im_l[y:y+h,x:x+w]
 
@@ -178,16 +204,21 @@ def demo():
 
                 cv2.circle(identified, (cX, cY), 10, (255,255,255), 2)
 
-                #dist = cv2.reprojectImageTo3D(raw_disp, rectifier.Q, handleMissingValues=True)
                 xs,ys = neighborhood(cX,cY,5)
-                dists = []
+                ds = []
                 for x in xs:
                     for y in ys:
-                        dist = projectDisparityTo3d(x, y, rectifier.Q, raw_disp[cY,cX]/16.) # for single point
-                        dist = np.linalg.norm(dist)
-                        if 0 < dist and dist < 5: # within reasonable range
-                            dists.append(dist)
-                print np.median(dists)
+                        #dist = projectDisparityTo3d(x, y, rectifier.Q, raw_disp[cY,cX]/16.) # for single point
+                        #dist = np.linalg.norm(dist)
+                        d = raw_dist[y,x,2]
+                        if 0 < d and d < 5: # within reasonable range
+                            ds.append(d)
+
+                color = identified[cY,cX]
+                d = np.median(ds)
+                o = Object(cropped, color,(cX,cY),a*d*d)# proportional to d**2, need scaling factor k(undetermined)
+                manager.add(o)
+                print 'l', len(manager.objects)
 
                 #if last_cropped != None:
                 #    same, match_frame= matcher.match(last_cropped, cropped, draw=True)

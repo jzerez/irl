@@ -66,7 +66,8 @@ class BlobDetector:
             ctr = id_ctrs[i]
             x,y,w,h = cv2.boundingRect(ctr)
             m = cv2.moments(ctr)
-            return x,y,w,h,m
+            a = cv2.contourArea(ctr)
+            return x,y,w,h,m,a
         return None
 
         #cv2.drawContours(identified, id_ctrs ,-1,(255,0,0),3)
