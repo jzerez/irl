@@ -1,0 +1,4 @@
+<launch>
+	<node pkg="edwin" type="opencv_imgproc.py" name="proc"/>
+	<node pkg="rosserial_python" type="serial_node.py" name="serial" args="_port:=/dev/ttyUSB0"/>
+</launch>
