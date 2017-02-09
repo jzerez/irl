@@ -497,5 +497,5 @@ class ObjectFind:
 
 if __name__=='__main__':
     print "in main"
-    of = ObjectFind() # Creates new instance of class PushobjGame
+    of = ObjectFind() # Creates new instance of class ObjectFind game
     of.run() # Calls run function
