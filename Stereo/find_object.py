@@ -13,7 +13,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from cv_bridge import CvBridge, CvBridgeError
 
-#####
+######
 
 ##### STRUCTURE
 ###   assume watch position                                                 HoldPos(self)
