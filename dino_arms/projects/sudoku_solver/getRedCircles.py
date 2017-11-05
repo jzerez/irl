@@ -4,6 +4,7 @@ import numpy as np
 import itertools
 import math
 from sets import Set
+import time
 
 '''
 Author:Nick Steelman
@@ -16,90 +17,6 @@ Deps:
 You can either import or run this script from main. To get it running, you can
 instantiate a circleFinder object and call run()
 '''
-
-
-def slope(x1, y1, x2, y2):
-    '''Absolute value of slope between 2 points'''
-
-    m = (y2-y1)/(x2-x1)
-    return abs(m)
-
-
-def whichSlope(node1,node2):
-    '''In order to not deal with slopes of like 1,000 for verticle lines, this
-    sfunction determines whether delta x or delta y is bigger and returns the
-    slope of  the smaller over the bigger. So it will always be below 0.5'''
-    if(abs(node1[0]-node2[0]) > abs(node1[1] - node2[1])):
-        return 1, slope(node1[0],node1[1],node2[0],node2[1])
-    else:
-        return 0, slope(node1[1],node1[0],node2[1],node2[0])
-    return cslope
-
-def getProbFour(circles):
-    '''
-    This script will find a rectagle given a list of points. It starts off with
-    first point and check all the others against each other for a right angle
-    Then checks the ramaining points for a right angle with the same 2 points
-    '''
-
-    if len(circles) < 4:
-        return 0, None
-    slopeDict = {}
-    circles = np.array(circles, dtype = "float32")
-    cNode = None
-    for i in circles:
-        indivNode = dict()
-        dirDict = dict()
-        for j in circles:
-            if (i==j).all(): pass
-            else:
-                d, cslope = whichSlope(i,j)
-                # print(indivNode)
-                for k,v in indivNode.iteritems():
-                    if k + error > cslope and k - error < cslope and d != dirDict[k]:
-                        ret, sq = getRightAngle(indivNode[k], j,circles,i)
-                        if ret: return 1,[tuple(i[0:2]), tuple((indivNode[k])[0:2]), tuple(j[0:2]),tuple(sq[0:2])]
-                if cslope:
-                    # print(cslope)
-                    indivNode[cslope] = j
-                    dirDict[cslope] = d
-    return 0, None
-
-
-def getRightAngle(node1, node2, circles, originalNode):
-    '''Determine if any of the points in circles contain a right angle between
-    node 1 and 2'''
-
-    for i in circles:
-        if any((i==node).all() for node in [node1, node2,originalNode]): pass
-        elif isRightAngle(i,node1,node2): return 1,i
-    return 0, None
-
-def isRightAngle(vertex, node1, node2):
-    '''Check to see if the nodes for a right angle'''
-
-    d, k = whichSlope(vertex, node1)
-    d2,cslope = whichSlope(vertex,node2)
-
-    return k + error > cslope and k - error < cslope and d != d2
-
-#
-def changePoints(points):
-    '''Given a set of four points, determine the top right and bottom left nodes'''
-
-    dist = np.sum(points, axis =1 )
-    mindex = np.argmin(dist)
-    if mindex == 0 or mindex == 3:
-        if points[1][0]<points[2][0]:
-            return np.float32([points[mindex],points[2],points[1],points[3-mindex]])
-        else:
-            return np.float32([points[mindex],points[1],points[2],points[3-mindex]])
-    else:
-        if points[0][0]<points[3][0]:
-            return np.float32([points[mindex],points[3],points[0],points[3-mindex]])
-        else:
-            return np.float32([points[mindex],points[0],points[3],points[3-mindex]])
-
 
 error = 0.1 #error allowed in the angles for the rectangle
 class circleFinder:
@@ -182,6 +99,48 @@ class circleFinder:
         cv2.line(self.frame, points[3], points[1], (0,0,255),4)
         cv2.line(self.frame, points[3], points[2], (0,0,255),4)
 
+    def getCenter(self,points):
+        height, width, channels = self.frame.shape
+        center = np.mean(np.float32(points),axis = 0)
+        return center[0]- width/2,center[1]-height/2
+
+    def getTop(self,points):
+        return self.findCenter([pts[0],pts[1]])
+
+    def getLeft(self,points):
+        return self.findCenter([pts[0],pts[2]])
+
+    def getRotation(self, points):
+        return math.arctan(points[1][1]-points[0][1]/points[1][0]-points[0][0])
+
+
+    def runOnce(self):
+
+        self.readFrame()
+        self.getMask()
+        circles = self.getCircles()
+        if circles is not None:
+            self.drawCircles(circles)
+            ret , corners = getProbFour(circles[0,:])
+            if ret:
+                self.permCorners = corners
+                pts1 =changePoints(self.permCorners)
+                pts2 = np.float32([[0,0],[self.outX,0],[0,self.outY],[self.outX,self.outY]])#newe points
+                self.M = cv2.getPerspectiveTransform(pts1,pts2)#transform
+
+        if self.permCorners is not None:
+            pts = changePoints(self.permCorners)
+            print(self.getCenter(pts))
+            self.drawFrame(self.permCorners)
+            self.board = cv2.warpPerspective(self.frame,self.M,(self.outX,self.outY))#new image
+            cv2.imshow('board',self.board)
+        cv2.imshow('mask',self.mask)
+        cv2.imshow('frame',self.frame)
+        k = cv2.waitKey(5) & 0xFF
+        if k == 27:
+            break
+
+
     def run(self):
         '''This is the main script to run everything. it read the frame, gets the
         mask and circles ,then it will try to find the square and save it to the
@@ -203,6 +162,8 @@ class circleFinder:
                     self.M = cv2.getPerspectiveTransform(pts1,pts2)#transform
 
             if self.permCorners is not None:
+                pts = changePoints(self.permCorners)
+                print(self.findCenter(pts))
                 self.drawFrame(self.permCorners)
                 self.board = cv2.warpPerspective(self.frame,self.M,(self.outX,self.outY))#new image
                 cv2.imshow('board',self.board)
@@ -212,6 +173,93 @@ class circleFinder:
             if k == 27:
                 break
         cv2.destroyAllWindows()
+
+
+
+def slope(x1, y1, x2, y2):
+    '''Absolute value of slope between 2 points'''
+
+    m = (y2-y1)/(x2-x1)
+    return abs(m)
+
+
+def whichSlope(node1,node2):
+    '''In order to not deal with slopes of like 1,000 for verticle lines, this
+    sfunction determines whether delta x or delta y is bigger and returns the
+    slope of  the smaller over the bigger. So it will always be below 0.5'''
+    if(abs(node1[0]-node2[0]) > abs(node1[1] - node2[1])):
+        return 1, slope(node1[0],node1[1],node2[0],node2[1])
+    else:
+        return 0, slope(node1[1],node1[0],node2[1],node2[0])
+    return cslope
+
+def getProbFour(circles):
+    '''
+    This script will find a rectagle given a list of points. It starts off with
+    first point and check all the others against each other for a right angle
+    Then checks the ramaining points for a right angle with the same 2 points
+    '''
+
+    if len(circles) < 4:
+        return 0, None
+    slopeDict = {}
+    circles = np.array(circles, dtype = "float32")
+    cNode = None
+    for i in circles:
+        indivNode = dict()
+        dirDict = dict()
+        for j in circles:
+            if (i==j).all(): pass
+            else:
+                d, cslope = whichSlope(i,j)
+                # print(indivNode)
+                for k,v in indivNode.iteritems():
+                    if k + error > cslope and k - error < cslope and d != dirDict[k]:
+                        ret, sq = getRightAngle(indivNode[k], j,circles,i)
+                        if ret: return 1,[tuple(i[0:2]), tuple((indivNode[k])[0:2]), tuple(j[0:2]),tuple(sq[0:2])]
+                if cslope:
+                    # print(cslope)
+                    indivNode[cslope] = j
+                    dirDict[cslope] = d
+    return 0, None
+
+
+def getRightAngle(node1, node2, circles, originalNode):
+    '''Determine if any of the points in circles contain a right angle between
+    node 1 and 2'''
+
+    for i in circles:
+        if any((i==node).all() for node in [node1, node2,originalNode]): pass
+        elif isRightAngle(i,node1,node2): return 1,i
+    return 0, None
+
+def isRightAngle(vertex, node1, node2):
+    '''Check to see if the nodes for a right angle'''
+
+    d, k = whichSlope(vertex, node1)
+    d2,cslope = whichSlope(vertex,node2)
+
+    return k + error > cslope and k - error < cslope and d != d2
+
+#
+
+
+def changePoints(points):
+    '''Given a set of four points, determine the top right and bottom left nodes'''
+
+    dist = np.sum(points, axis =1 )
+    mindex = np.argmin(dist)
+    if mindex == 0 or mindex == 3:
+        if points[1][0]<points[2][0]:
+            return np.float32([points[mindex],points[2],points[1],points[3-mindex]])
+        else:
+            return np.float32([points[mindex],points[1],points[2],points[3-mindex]])
+    else:
+        if points[0][0]<points[3][0]:
+            return np.float32([points[mindex],points[3],points[0],points[3-mindex]])
+        else:
+            return np.float32([points[mindex],points[0],points[3],points[3-mindex]])
+
 
 if __name__ == "__main__":
     circleF = circleFinder()
