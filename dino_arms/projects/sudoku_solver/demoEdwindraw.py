@@ -18,7 +18,9 @@ tiltError = 0.3
 class movementControl:
 	moveMult = 5
 	tiltMult = 5
-	rectangle = None
+	rectCorners = None
+	stepSize = None
+	sizeBoard = 4
 
 	def __init__(self,pos = None):
 		if pos is None:
@@ -26,7 +28,9 @@ class movementControl:
 		else:
 			self.pos = pos
 		self.wristPos = 1000
+
 		self.arm_pub = rospy.Publisher('arm_cmd', String, queue_size=10)
+		self.write_pub = rospy.Publisher('write_cmd', Edwin_Shape, queue_size=10)
 
 
 	def move(self):
@@ -39,7 +43,7 @@ class movementControl:
 		print "sending: ", msg
 		self.arm_pub.publish(msg)
 
-	def findPoint(circleObj, method):
+	def findPoint(self, circleObj, method):
 		xDiff,yDiff = method(changePoints(circleObj.permCorners))
 		while abs(xDiff) > pixelError or abs(yDiff) > pixelError:
 			self.pos[0] += int(xDiff * self.moveMult)
@@ -59,7 +63,7 @@ class movementControl:
 	def findTop(circleObj):
 		return findPoint(circleObj.getTop)
 
-	def straightenRect(circleObj):
+	def straightenRect(self, circleObj):
 		#positive result form circleObj means turn right
 		tiltVal = circleObj.getRotation(changePoints(circleObj.permCorners))
 		while abs(tiltVal) > tiltError:
@@ -68,10 +72,27 @@ class movementControl:
 			circleObj.runOnce()
 			tiltVal = circleObj.getRotation(changePoints(circleObj.permCorners))
 
-	def getDims(circleObj):
+	def getDims(self, circleObj):
 		centerx, centery = findCenter(circleObj)
+		print 'CENTER'
+		print 'x:',centerx,'y:',centery
 		topx, topy = findTop(circleObj)
+		print 'TOP'
+		print 'x:',topx,'y:',topy
 		leftx, lefty = findLeft(circleObj)
+		print 'LEFT'
+		print 'x:',leftx,'y:',lefty
+		xlength = 2 * (centerx - leftx)
+		ylength = 2 * (centery - topy)
+		self.rectCorners = [(leftx,topy),(leftx + xlength,topy),(leftx,topy+ylength),(leftx + xlength,topy + ylengths)]
+		self.stepSize = (xlength/self.sizeBoard,ylength/self.sizeBoard)
+
+	def goToLoc(x,y):
+		'''Indexing from 0'''
+		self.pos[0] = self.rectCorners[0][0] + x * self.stepSize[0]
+		self.pos[1] = self.rectCorners[0][1] + y * self.stepSize[1]
+		self.move()
+
 
 
 def z_calculation(input_y):
@@ -81,28 +102,30 @@ def z_calculation(input_y):
 
 def run():
 	rospy.init_node('arm_tester', anonymous=True)
-	pub = rospy.Publisher('write_cmd', Edwin_Shape, queue_size=10)
-	arm_pub = rospy.Publisher('arm_cmd', String, queue_size=10)
 	time.sleep(2)
 	print "starting"
 
 	# while not rospy.is_shutdown():
 	msg = Edwin_Shape()
+	moveObj = movementControl()
+	circleObj = getRedCircles.circleFinder()
+	moveObj.getDims(circleObj)
 
 
-	msg.shape = "123456"
-	msg.x = -500
-	msg.y = 5700
-	msg.z = -835
-	pub.publish(msg)
-	time.sleep(5)
 
-	msg.shape = "7890!?"
-	msg.x = -500
-	msg.y = 5400
-	msg.z = -835
-	pub.publish(msg)
-	time.sleep(5)
+	# msg.shape = "123456"
+	# msg.x = -500
+	# msg.y = 5700
+	# msg.z = -835
+	# pub.publish(msg)
+	# time.sleep(5)
+	#
+	# msg.shape = "7890!?"
+	# msg.x = -500
+	# msg.y = 5400
+	# msg.z = -835
+	# pub.publish(msg)
+	# time.sleep(5)
 	#
 	# msg.shape = "abcdef"
 	# msg.x = -500
