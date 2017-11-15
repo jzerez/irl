@@ -27,6 +27,12 @@ class circleFinder:
     kernel = np.ones((3,3),np.uint8)
     outX = 300#output dimensions for the box found
     outY = 300
+    new = True
+    movementError = 50
+    valid = np.array([0,0,0,0])
+    counters = np.array([0,0,0,0])
+    counterLim = 20
+
 
     def __init__(self,videoNum = 0):
         self.error = error
@@ -93,7 +99,7 @@ class circleFinder:
 
     def drawFrame(self, points):
         '''Draw a borader betweeen points on the frame'''
-
+        points = [tuple(point) for point in points]
         cv2.line(self.frame, points[0], points[1], (0,0,255),4)
         cv2.line(self.frame, points[0], points[2], (0,0,255),4)
         cv2.line(self.frame, points[3], points[1], (0,0,255),4)
@@ -101,17 +107,69 @@ class circleFinder:
 
     def getCenter(self,points):
         height, width, channels = self.frame.shape
-        center = np.mean(np.float32(points),axis = 0)
-        return center[0]- width/2,center[1]-height/2
-
-    def getTop(self,points):
-        return self.findCenter([pts[0],pts[1]])
-
-    def getLeft(self,points):
-        return self.findCenter([pts[0],pts[2]])
+        center = np.mean(points,axis = 0)
+        return center[0]- width/2,height/2 -center[1]
 
     def getRotation(self, points):
-        return math.arctan(points[1][1]-points[0][1]/points[1][0]-points[0][0])
+        return math.atan((points[1][1]-points[0][1])/abs(points[1][0]-points[0][0]))
+
+    def findSquare(self, circles):
+        self.drawCircles(circles)
+        ret , corners = getProbFour(circles[0,:])
+        if ret:
+            self.valid =np.array([1,1,1,1])
+            self.permCorners =np.squeeze(changePoints(corners))
+            pts2 = np.float32([[0,0],[self.outX,0],[0,self.outY],[self.outX,self.outY]])#newe points
+            self.M = cv2.getPerspectiveTransform(self.permCorners,pts2)#transform
+
+    def fitPerm(self, circles):
+        '''This code will track an arbitrary amount of circles. When one of the
+        circles has excessive distance to the closest circle, the point is dropped'''
+        valid = np.squeeze(np.argwhere(self.valid)) #get index of which points are valid
+        # print(self.valid)
+        a = np.array(circles[0,:])[:,0:2] #get array of circle centers
+        b = self.permCorners[valid] #get valied points from the saved rect
+        # if b.shape
+        if len(b.shape) != 2:
+            self.trackOne(a ,b ,valid)
+            return
+        c = a-b[:,None] #subtract each point from each circle will make c X p X 2 matrix
+        c = np.hypot(c[:,:,0], c[:,:,1]) #get hypot of each point
+        dist = np.amin(c, axis = 1) # get min for each point
+        notError = np.argwhere(dist<self.movementError)#where we are good
+        Error = np.argwhere(dist>=self.movementError)#where the circle is lost
+        if len(notError):
+            closest = np.argmin(c, axis = 1)[notError]#get the
+            self.permCorners[valid[notError]] = a[closest] #reset the corners
+
+        for i in valid[Error]:
+            if self.counters[i] >= self.counterLim:
+                self.valid[i] = 0
+            else:
+                self.counters[i] += 1
+        for i in valid[notError]:
+            if self.counters[i] > 0:
+                self.counters[i] -= 1
+
+    def trackOne(self, a, b,valid):
+        c = a-b #subtract each point from each circle will make c X p X 2 matrix
+        c = np.hypot(c[:,0], c[:,1]) #get hypot of each point
+        dist = np.amin(c) # get min for each point
+        # print dist
+
+        if dist < self.movementError:
+            closest = np.argmin(c)#get the
+            self.permCorners[valid] = a[closest] #reset the corners
+            if self.counters[valid] > 0:
+                self.counters[valid] -= 1
+        else:
+            if self.counters[valid] >= self.counterLim:
+                self.valid[valid] = 0
+            else:
+                self.counters[valid] += 1
+
+
+
 
 
     def runOnce(self):
@@ -120,25 +178,24 @@ class circleFinder:
         self.getMask()
         circles = self.getCircles()
         if circles is not None:
-            self.drawCircles(circles)
-            ret , corners = getProbFour(circles[0,:])
-            if ret:
-                self.permCorners = corners
-                pts1 =changePoints(self.permCorners)
+            if self.new or self.permCorners is None:
+                self.findSquare(circles)
+                self.new = False
+            else:
+                self.fitPerm(circles)
                 pts2 = np.float32([[0,0],[self.outX,0],[0,self.outY],[self.outX,self.outY]])#newe points
-                self.M = cv2.getPerspectiveTransform(pts1,pts2)#transform
+                self.M = cv2.getPerspectiveTransform(self.permCorners,pts2)#transform
+                if sum(self.valid) == 0:
+                    self.new = True
 
-        if self.permCorners is not None:
-            pts = changePoints(self.permCorners)
-            print(self.getCenter(pts))
+        if sum(self.valid) == 4:
             self.drawFrame(self.permCorners)
             self.board = cv2.warpPerspective(self.frame,self.M,(self.outX,self.outY))#new image
             cv2.imshow('board',self.board)
         cv2.imshow('mask',self.mask)
         cv2.imshow('frame',self.frame)
         k = cv2.waitKey(5) & 0xFF
-        if k == 27:
-            break
+
 
 
     def run(self):
@@ -153,17 +210,15 @@ class circleFinder:
             self.getMask()
             circles = self.getCircles()
             if circles is not None:
-                self.drawCircles(circles)
-                ret , corners = getProbFour(circles[0,:])
-                if ret:
-                    self.permCorners = corners
-                    pts1 =changePoints(self.permCorners)
-                    pts2 = np.float32([[0,0],[self.outX,0],[0,self.outY],[self.outX,self.outY]])#newe points
-                    self.M = cv2.getPerspectiveTransform(pts1,pts2)#transform
+                if self.new or self.permCorners is None:
+                    self.findSquare(circles)
+                    self.new = False
+                else:
+                    self.fitPerm(circles)
+                    if sum(self.valid) == 0:
+                        self.new = True
 
-            if self.permCorners is not None:
-                pts = changePoints(self.permCorners)
-                print(self.findCenter(pts))
+            if sum(self.valid) == 4:
                 self.drawFrame(self.permCorners)
                 self.board = cv2.warpPerspective(self.frame,self.M,(self.outX,self.outY))#new image
                 cv2.imshow('board',self.board)
@@ -178,7 +233,6 @@ class circleFinder:
 
 def slope(x1, y1, x2, y2):
     '''Absolute value of slope between 2 points'''
-
     m = (y2-y1)/(x2-x1)
     return abs(m)
 
